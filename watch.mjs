@@ -1,17 +1,21 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { pathToFileURL } from "node:url";
 
 const STATE_FILE = new URL("./state.json", import.meta.url);
 const SOURCES_FILE = new URL("./sources.json", import.meta.url);
 const STATE_VERSION = 1;
 const UA = "unilag-watcher/1.0 (+https://github.com/michaelkage/unilag-watcher)";
 
+// Forget posts unseen for this long so state.json cannot grow without bound.
+const RETENTION_DAYS = 180;
+
 const SEED = process.argv.includes("--seed");
 const DRY_RUN = process.argv.includes("--dry-run");
 
 // ---------- helpers ----------
 
-const decodeEntities = (s) =>
+export const decodeEntities = (s) =>
   s
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
@@ -31,16 +35,16 @@ const pickTag = (xml, name) => {
 
 // Strip markup so that cosmetic edits (whitespace, tracking attrs) do not
 // register as content changes, but real text edits do.
-const plainText = (html) =>
+export const plainText = (html) =>
   decodeEntities(html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
 
-const fingerprint = (text) =>
+export const fingerprint = (text) =>
   createHash("sha256").update(text).digest("hex").slice(0, 16);
 
-const escapeHtml = (s) =>
+export const escapeHtml = (s) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-const findPdfs = (xml) => {
+export const findPdfs = (xml) => {
   const urls = new Set();
   for (const m of xml.matchAll(/href=["']([^"']+\.pdf(?:\?[^"']*)?)["']/gi)) {
     urls.add(decodeEntities(m[1]));
@@ -53,7 +57,7 @@ const absolute = (url) =>
 
 // ---------- feed parsing ----------
 
-function parseFeed(xml) {
+export function parseFeed(xml) {
   const items = [];
   for (const match of xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)) {
     const block = match[1];
@@ -85,6 +89,22 @@ function parseFeed(xml) {
 }
 
 // ---------- state ----------
+
+// Drop entries not seen for RETENTION_DAYS. Feeds only ever expose a recent
+// window, so these can no longer be compared against anything.
+export function pruneSeen(seen, now = Date.now()) {
+  const cutoff = now - RETENTION_DAYS * 86_400_000;
+  const kept = {};
+  let dropped = 0;
+
+  for (const [id, entry] of Object.entries(seen)) {
+    const seenAt = Date.parse(entry.lastSeen ?? "");
+    if (!Number.isFinite(seenAt) || seenAt >= cutoff) kept[id] = entry;
+    else dropped++;
+  }
+
+  return { kept, dropped };
+}
 
 async function loadState() {
   try {
@@ -126,7 +146,7 @@ async function sendTelegram(text) {
 // Telegram caps a message at 4096 chars. Keep well clear of that.
 const MAX_MESSAGE = 3800;
 
-function renderEntries(source, entries) {
+export function renderEntries(source, entries) {
   const body = entries
     .map((change) => {
       const badge = change.kind === "new" ? "🆕 NEW" : "✏️ UPDATED";
@@ -141,7 +161,7 @@ function renderEntries(source, entries) {
   return `<b>${escapeHtml(source.label)}</b>\n\n${body}`;
 }
 
-function splitMessage(source, changes) {
+export function splitMessage(source, changes) {
   // Greedy pack: keep as many entries per message as fit, never split an entry.
   const chunks = [];
   let current = [];
@@ -167,6 +187,7 @@ async function main() {
   const now = new Date().toISOString();
 
   let totalChanges = 0;
+  let totalPruned = 0;
   let nextSources = { ...state.sources };
 
   for (const source of sources) {
@@ -202,11 +223,15 @@ async function main() {
         changes.push({ kind: "updated", item });
       }
 
-      seen[item.id] = { hash: item.hash, firstSeen: previous?.firstSeen ?? now };
+      seen[item.id] = { hash: item.hash, firstSeen: previous?.firstSeen ?? now, lastSeen: now };
     }
 
+    const { kept, dropped } = pruneSeen(seen);
+    if (dropped) console.log(`[${source.id}] pruned ${dropped} stale post(s) older than ${RETENTION_DAYS} days`);
+
     totalChanges += changes.length;
-    nextSources[source.id] = { url: source.url, seen };
+    totalPruned += dropped;
+    nextSources[source.id] = { url: source.url, seen: kept };
 
     if (SEED) continue;
 
@@ -237,8 +262,9 @@ async function main() {
 
   // Nothing changed, so leave state.json untouched. Rewriting it just to bump
   // the timestamp would leave the CI working tree dirty every run and produce
-  // an empty commit every 30 minutes.
-  if (totalChanges === 0 && state.lastChange) {
+  // an empty commit every 30 minutes. Pruning counts as a change, otherwise
+  // stale entries would be recomputed and discarded on every run forever.
+  if (totalChanges === 0 && totalPruned === 0 && state.lastChange) {
     console.log("state unchanged, not rewritten");
     return;
   }
@@ -247,10 +273,13 @@ async function main() {
   // notification is retried on the next run instead of being lost.
   const nextState = { version: STATE_VERSION, lastChange: now, sources: nextSources };
   await writeFile(STATE_FILE, `${JSON.stringify(nextState, null, 2)}\n`);
-  console.log(`state written (${totalChanges} change(s) recorded)`);
+  console.log(`state written (${totalChanges} change(s), ${totalPruned} pruned)`);
 }
 
-main().catch((err) => {
-  console.error(`fatal: ${err.message}`);
-  process.exit(1);
-});
+// Only run when invoked directly, so tests can import the pure functions.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(`fatal: ${err.message}`);
+    process.exit(1);
+  });
+}

@@ -21,6 +21,10 @@ Posts are keyed by WordPress post ID (`?p=80541`), not URL — URLs change when 
 is edited, IDs do not. The fingerprint is taken over tag-stripped text, so cosmetic
 whitespace edits don't trigger alerts but real text changes do.
 
+The feeds carry **full post bodies**, not excerpts — none of UNILAG's items use the
+`<!--more-->` truncation marker, so an amended timetable is detected wherever in the
+post it was changed.
+
 Any post containing a `.pdf` link has the direct PDF URL included in the alert.
 
 ### Guarantees
@@ -29,6 +33,9 @@ Any post containing a `.pdf` link has the direct PDF URL included in the alert.
   is not written and the next run retries the same alert.
 - **A feed failure never loses data.** If one source errors, its state is left
   untouched and only that source is retried next run.
+- **State is bounded.** Posts unseen for 180 days are pruned, so `state.json` cannot
+  grow without limit. Feeds only ever expose a recent window, so anything older can no
+  longer be compared against anything.
 
 ## Setup
 
@@ -46,6 +53,10 @@ Add both under **Settings → Secrets and variables → Actions**:
 | --- | --- |
 | `TELEGRAM_BOT_TOKEN` | token from BotFather |
 | `TELEGRAM_CHAT_ID` | your numeric chat ID |
+
+Until both are set, every scheduled run is a **no-op**: the workflow skips the check
+and posts a warning annotation instead of failing, so the run history stays green. No
+state is written while unconfigured, so nothing is missed once you add them.
 
 ### 3. Seed the baseline
 
@@ -66,6 +77,7 @@ The workflow then starts alerting only on genuine changes.
 npm run dry     # fetch + diff, print what would be sent, write nothing
 npm run watch   # actually send (needs secrets in env)
 npm run seed    # record baseline, send nothing
+npm test        # unit tests for the delta logic
 ```
 
 Pass secrets via a `.env` file (gitignored) using Node's built-in loader:
@@ -110,4 +122,5 @@ worse than a bit of noise.
 | `watch.mjs` | the entire watcher — fetch, parse, diff, notify, save |
 | `sources.json` | feeds to monitor and per-source keyword filters |
 | `state.json` | last-seen cache, committed by CI after each run |
+| `test.mjs` | unit tests covering parsing, fingerprinting and message splitting |
 | `.github/workflows/watch.yml` | 30-minute cron + state commit-back |

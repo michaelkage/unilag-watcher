@@ -24,7 +24,15 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Warn if unconfigured
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN == '' || secrets.TELEGRAM_CHAT_ID == '' }}
+        run: |
+          echo "::warning::Telegram secrets are not set, so this run is a no-op. Add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID under Settings > Secrets and variables > Actions."
+
       - name: Check for changes and notify
+        # Skipped rather than failed while unconfigured, so the run history stays
+        # green instead of showing a red X every 30 minutes.
+        if: ${{ secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != '' }}
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

@@ -8,7 +8,8 @@
   "scripts": {
     "watch": "node watch.mjs",
     "seed": "node watch.mjs --seed",
-    "dry": "node watch.mjs --dry-run"
+    "dry": "node watch.mjs --dry-run",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"
