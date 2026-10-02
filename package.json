@@ -1,0 +1,16 @@
+{
+  "name": "unilag-watcher",
+  "version": "1.0.0",
+  "description": "Delta-tracking watcher for UNILAG news and timetable feeds. Notifies via Telegram.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "watch": "node watch.mjs",
+    "seed": "node watch.mjs --seed",
+    "dry": "node watch.mjs --dry-run"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

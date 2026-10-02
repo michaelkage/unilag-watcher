@@ -1,0 +1,45 @@
+name: UNILAG Watcher
+
+on:
+  schedule:
+    # Every 30 min. Minute is deliberately off :00 — GitHub's cron is heavily
+    # oversubscribed at the top of the hour and runs queue up or get skipped.
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: unilag-watcher
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check for changes and notify
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node watch.mjs
+
+      - name: Commit updated state
+        run: |
+          # status --porcelain, not git diff: it also catches the untracked
+          # state.json produced by the very first run.
+          if [ -z "$(git status --porcelain -- state.json)" ]; then
+            echo "state.json unchanged, nothing to commit"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          git commit -m "chore: update watcher state"
+          git push

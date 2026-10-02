@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "lastChange": "2026-10-02T20:04:12.988Z",
+  "sources": {
+    "news": {
+      "url": "https://unilag.edu.ng/feed/",
+      "seen": {
+        "80420": {
+          "hash": "8086e24bf60f8c71",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "80425": {
+          "hash": "7edf4465953ff8b1",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "80429": {
+          "hash": "99b3306ee5761a52",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "80440": {
+          "hash": "8ac8a7c6d96c9617",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "80444": {
+          "hash": "b7fa0345aff2104c",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "80476": {
+          "hash": "131f9c864388063d",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "80486": {
+          "hash": "05400766548acc05",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "80535": {
+          "hash": "6fa436b8d96890fc",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "80539": {
+          "hash": "06aa91943f62ff13",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "80541": {
+          "hash": "0197e57879b6c144",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        }
+      }
+    },
+    "exam-timetable": {
+      "url": "https://unilag.edu.ng/search/exam+timetable/feed/rss2/",
+      "seen": {
+        "4949": {
+          "hash": "84d80c4566c64cee",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "9827": {
+          "hash": "a6bb2bce74cfd7f8",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "60199": {
+          "hash": "6c25b06d45799b08",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "69916": {
+          "hash": "91c7246dd23c1eef",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "76896": {
+          "hash": "72aea12130d0cccb",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "80486": {
+          "hash": "05400766548acc05",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "https://unilag.edu.ng/parent-portal/": {
+          "hash": "a4488a4f1dd499bd",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "https://unilag.edu.ng/student-portal/": {
+          "hash": "04836b3bd1577cbe",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "https://unilag.edu.ng/unilag-undergraduate-studies/": {
+          "hash": "470bfabc2a9b41c0",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        }
+      }
+    },
+    "lecture-timetable": {
+      "url": "https://unilag.edu.ng/search/lecture+timetable/feed/rss2/",
+      "seen": {
+        "80486": {
+          "hash": "05400766548acc05",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "https://unilag.edu.ng/parent-portal/": {
+          "hash": "a4488a4f1dd499bd",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "https://unilag.edu.ng/staff-portal/": {
+          "hash": "a64cacfe78a930ed",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "https://unilag.edu.ng/student-portal/": {
+          "hash": "04836b3bd1577cbe",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "https://unilag.edu.ng/unilag-undergraduate-studies/": {
+          "hash": "470bfabc2a9b41c0",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "https://unilag.edu.ng/admission/": {
+          "hash": "cce02e9703d02f3e",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        }
+      }
+    },
+    "admission-deadline": {
+      "url": "https://unilag.edu.ng/search/admission+deadline/feed/rss2/",
+      "seen": {
+        "58144": {
+          "hash": "06be4c95ba9ae374",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "60517": {
+          "hash": "91f2ef2670f6dde4",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "60704": {
+          "hash": "6040b70fd28150c9",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "72751": {
+          "hash": "def48fe48f0c1f93",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "74091": {
+          "hash": "4ceba6704e44ed19",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "77703": {
+          "hash": "e33f522ea43f34dc",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "78201": {
+          "hash": "d1f46ca515d8c2d9",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "78256": {
+          "hash": "0ee2b495a5657a41",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "80137": {
+          "hash": "89df8eb7d56456e0",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        },
+        "80429": {
+          "hash": "99b3306ee5761a52",
+          "firstSeen": "2026-10-02T20:04:12.988Z"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "sources": [
+    {
+      "id": "news",
+      "label": "UNILAG News",
+      "url": "https://unilag.edu.ng/feed/",
+      "keywords": []
+    },
+    {
+      "id": "exam-timetable",
+      "label": "Exam Timetable",
+      "url": "https://unilag.edu.ng/search/exam+timetable/feed/rss2/",
+      "keywords": []
+    },
+    {
+      "id": "lecture-timetable",
+      "label": "Lecture Timetable",
+      "url": "https://unilag.edu.ng/search/lecture+timetable/feed/rss2/",
+      "keywords": []
+    },
+    {
+      "id": "admission-deadline",
+      "label": "Admission Deadline",
+      "url": "https://unilag.edu.ng/search/admission+deadline/feed/rss2/",
+      "keywords": []
+    }
+  ]
+}
