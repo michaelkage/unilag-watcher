@@ -1,5 +1,7 @@
 # unilag-watcher
 
+[![watcher status](https://github.com/michaelkage/unilag-watcher/actions/workflows/watch.yml/badge.svg)](https://github.com/michaelkage/unilag-watcher/actions/workflows/watch.yml)
+
 Delta-tracking watcher for University of Lagos public feeds. Notifies you on Telegram
 when news appears or an existing post (e.g. an exam timetable) is **amended**.
 
