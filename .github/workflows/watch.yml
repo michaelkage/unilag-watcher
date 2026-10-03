@@ -4,7 +4,7 @@ on:
   schedule:
     # Every 30 min. Minute is deliberately off :00 — GitHub's cron is heavily
     # oversubscribed at the top of the hour and runs queue up or get skipped.
-    - cron: "17,47 * * * *"
+    - cron: "7,17,47 * * * *"
   workflow_dispatch:
 
 permissions:
