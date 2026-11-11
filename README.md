@@ -137,3 +137,4 @@ worse than a bit of noise.
 | `state.json` | last-seen cache, committed by CI after each run |
 | `test.mjs` | unit tests covering parsing, fingerprinting and message splitting |
 | `.github/workflows/watch.yml` | 30-minute cron + state commit-back |
+| `.github/workflows/test.yml` | Unit tests on pushes and pull requests |
