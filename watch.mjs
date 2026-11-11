@@ -10,7 +10,7 @@ const RETENTION_DAYS = 180;
 export const DEEP_POLL_DAYS = 60;
 export const DEEP_POLL_CONCURRENCY = 4;
 const REQUEST_TIMEOUT_MS = 15_000;
-const PRIORITY_PATTERN = /\\b(?:time\\s*table|schedule|examinations?|exams?|lectures?|academic\\s+calendar)\\b/i;
+const PRIORITY_PATTERN = /\b(?:time\s*table|schedule|examinations?|exams?|lectures?|academic\s+calendar)\b/i;
 const SEED = process.argv.includes("--seed");
 const DRY_RUN = process.argv.includes("--dry-run");
 
