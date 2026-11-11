@@ -81,6 +81,9 @@ export function parsePostPage(html, requestedUrl, id) {
   const bodyClass = html.match(/<body\b[^>]*class=["']([^"']+)["']/i)?.[1] ?? "";
   const bodyPostId = bodyClass.match(/\bpostid-(\d+)\b/i)?.[1];
   const articlePostId = html.match(/<article\b[^>]*id=["']post-(\d+)["']/i)?.[1];
+  if (!bodyPostId && !articlePostId) {
+    throw new Error("WordPress page did not expose a verifiable post ID for requested ID " + id);
+  }
   if ((bodyPostId && bodyPostId !== String(id)) ||
       (articlePostId && articlePostId !== String(id))) {
     throw new Error("WordPress returned a different post than requested ID " + id);
