@@ -15,6 +15,7 @@ import {
   isWithinDeepPollWindow,
   postUrl,
   deepPageChanged,
+  combinedDeepHash,
 } from "./watch.mjs";
 
 const FEED = `<?xml version="1.0"?>
@@ -185,11 +186,13 @@ test("RSS and deep-page fingerprints are compared only within their own formats"
   const item = { hash: "direct-page-hash" };
   assert.equal(deepPageChanged({
     priority: true,
+    deepHashVersion: 2,
     hash: "rss-hash",
     deepHash: "direct-page-hash",
   }, item), false);
   assert.equal(deepPageChanged({
     priority: true,
+    deepHashVersion: 2,
     hash: "rss-hash",
     deepHash: "previous-direct-hash",
   }, item), true);
@@ -201,4 +204,24 @@ test("RSS and deep-page fingerprints are compared only within their own formats"
     priority: false,
     deepHash: "previous-direct-hash",
   }, item), false);
+});
+
+
+test("PDF byte fingerprints contribute to the deep-page fingerprint", () => {
+  const body = "same-article-body";
+  const first = combinedDeepHash(body, {
+    "https://unilag.edu.ng/timetable.pdf": "pdf-bytes-a",
+  });
+  const replacedPdf = combinedDeepHash(body, {
+    "https://unilag.edu.ng/timetable.pdf": "pdf-bytes-b",
+  });
+  const addedPdf = combinedDeepHash(body, {
+    "https://unilag.edu.ng/timetable.pdf": "pdf-bytes-a",
+    "https://unilag.edu.ng/venue-map.pdf": "pdf-bytes-c",
+  });
+  assert.notEqual(first, replacedPdf);
+  assert.notEqual(first, addedPdf);
+  assert.equal(first, combinedDeepHash(body, {
+    "https://unilag.edu.ng/timetable.pdf": "pdf-bytes-a",
+  }));
 });
