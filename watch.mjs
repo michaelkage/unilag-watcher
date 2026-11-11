@@ -78,6 +78,13 @@ export function parseFeed(xml) {
 
 /** Parse the actual WordPress article body, excluding site chrome. */
 export function parsePostPage(html, requestedUrl, id) {
+  const bodyClass = html.match(/<body\b[^>]*class=["']([^"']+)["']/i)?.[1] ?? "";
+  const bodyPostId = bodyClass.match(/\bpostid-(\d+)\b/i)?.[1];
+  const articlePostId = html.match(/<article\b[^>]*id=["']post-(\d+)["']/i)?.[1];
+  if ((bodyPostId && bodyPostId !== String(id)) ||
+      (articlePostId && articlePostId !== String(id))) {
+    throw new Error("WordPress returned a different post than requested ID " + id);
+  }
   const article = html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i)?.[1] ?? "";
   const main = html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i)?.[1] ?? "";
   const scope = article || main;
