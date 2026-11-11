@@ -101,7 +101,10 @@ export function parsePostPage(html, requestedUrl, id) {
   if (canonicalUrl) {
     try {
       const parsedCanonical = new URL(canonicalUrl);
-      if (parsedCanonical.protocol === "https:" && ["unilag.edu.ng", "www.unilag.edu.ng"].includes(parsedCanonical.hostname)) link = canonicalUrl;
+      if (parsedCanonical.protocol === "https:" && ["unilag.edu.ng", "www.unilag.edu.ng"].includes(parsedCanonical.hostname)) {
+        if (parsedCanonical.hostname === "www.unilag.edu.ng") parsedCanonical.hostname = "unilag.edu.ng";
+        link = parsedCanonical.href;
+      }
     } catch { /* retain the already-validated requested permalink */ }
   }
   const item = { id: String(id), title, link, text, pdfs: findPdfs(bodyHtml, link), hash: fingerprint(text + title) };
@@ -221,7 +224,6 @@ async function fetchPdfFingerprints(urls, previousHashes = {}, previousValidator
 
   for (const rawUrl of urls) {
     const url = new URL(rawUrl);
-    if (url.protocol !== "https:") throw new Error("refusing non-HTTPS PDF attachment: " + rawUrl);
 
     // Only download attachments hosted by UNILAG. External PDF links are still
     // represented in the aggregate fingerprint by URL, but are not fetched.
@@ -230,12 +232,19 @@ async function fetchPdfFingerprints(urls, previousHashes = {}, previousValidator
       continue;
     }
 
+    // The www host has a known certificate problem; normalize its attachments
+    // to the apex host, and upgrade legacy HTTP links to HTTPS.
+    if (url.hostname === "www.unilag.edu.ng") url.hostname = "unilag.edu.ng";
+    if (url.protocol === "http:") url.protocol = "https:";
+    if (url.protocol !== "https:") throw new Error("refusing non-HTTPS PDF attachment: " + rawUrl);
+    const requestUrl = url.href;
+
     const previous = previousValidators[rawUrl] ?? {};
     const headers = { "user-agent": UA, accept: "application/pdf,application/octet-stream" };
     if (previous.etag) headers["if-none-match"] = previous.etag;
     if (previous.lastModified) headers["if-modified-since"] = previous.lastModified;
 
-    const response = await fetch(rawUrl, {
+    const response = await fetch(requestUrl, {
       headers,
       redirect: "follow",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
