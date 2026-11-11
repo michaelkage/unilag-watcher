@@ -149,7 +149,7 @@ test("priority feed metadata flags timetable posts and PDF attachments", () => {
 
 test("parsePostPage fingerprints article content, not site navigation", () => {
   const page = `<!doctype html><html><head><title>GST Examination Timetable | University of Lagos</title></head>
-  <body><nav>Navigation that must not affect the hash</nav><article>
+  <body class="postid-80123"><nav>Navigation that must not affect the hash</nav><article>
   <h1 class="entry-title">GST Examination Timetable</h1>
   <div class="entry-content"><p>Exam starts at 9am in Hall A.</p>
   <a href="/wp-content/uploads/exam.pdf">Download</a></div>
@@ -160,8 +160,13 @@ test("parsePostPage fingerprints article content, not site navigation", () => {
   assert.equal(parsed.priority, true);
   assert.deepEqual(parsed.pdfs, ["https://unilag.edu.ng/wp-content/uploads/exam.pdf"]);
   assert.throws(
-    () => parsePostPage(page.replace("<body>", '<body class="postid-999">'), "https://unilag.edu.ng/?p=80123", "80123"),
+    () => parsePostPage(page.replace("postid-80123", "postid-999"), "https://unilag.edu.ng/?p=80123", "80123"),
     /different post than requested ID/,
+  );
+  assert.throws(
+    () => parsePostPage(page.replace(' class="postid-80123"', ""), "https://unilag.edu.ng/?p=80123", "80123"),
+    /did not expose a verifiable post ID/,
+    "a page without a WordPress identity marker must not be trusted",
   );
   const cosmetic = page.replace("Navigation that must not affect the hash", "Different navigation")
     .replace("Footer text must not affect the hash", "Different footer");
