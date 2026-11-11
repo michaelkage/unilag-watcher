@@ -35,6 +35,7 @@ export const fingerprint = (text) => createHash("sha256").update(text).digest("h
 export const escapeHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 export const absolute = (url, base = "https://unilag.edu.ng/") => {
+  if (!url) return "";
   try { return new URL(url, base).href; } catch { return ""; }
 };
 
@@ -94,7 +95,14 @@ export function parsePostPage(html, requestedUrl, id) {
   if (!title || !text) throw new Error("post " + id + ": page did not contain a readable article");
 
   const canonical = html.match(/<link\b[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1];
-  const link = canonical ? absolute(decodeEntities(canonical)) : requestedUrl;
+  const canonicalUrl = canonical ? absolute(decodeEntities(canonical)) : "";
+  let link = requestedUrl;
+  if (canonicalUrl) {
+    try {
+      const parsedCanonical = new URL(canonicalUrl);
+      if (parsedCanonical.protocol === "https:" && ["unilag.edu.ng", "www.unilag.edu.ng"].includes(parsedCanonical.hostname)) link = canonicalUrl;
+    } catch { /* retain the already-validated requested permalink */ }
+  }
   const item = { id: String(id), title, link, text, pdfs: findPdfs(bodyHtml, link), hash: fingerprint(text + title) };
   item.priority = isPriority(item);
   return item;
