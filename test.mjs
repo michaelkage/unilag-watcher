@@ -13,6 +13,7 @@ import {
   pruneSeen,
   parsePostPage,
   isWithinDeepPollWindow,
+  postUrl,
 } from "./watch.mjs";
 
 const FEED = `<?xml version="1.0"?>
@@ -165,4 +166,13 @@ test("deep-poll window uses firstSeen and excludes records older than 60 days", 
   assert.equal(isWithinDeepPollWindow({ firstSeen: "2026-09-01T00:00:00Z" }, now), false);
   assert.equal(isWithinDeepPollWindow({ firstSeen: "2026-11-12T00:00:00Z" }, now), false);
   assert.equal(isWithinDeepPollWindow({}, now), false);
+});
+
+
+test("deep polling always uses immutable WordPress post IDs, not mutable slugs", () => {
+  assert.equal(
+    postUrl({ link: "https://unilag.edu.ng/old-timetable-slug/" }, "80123"),
+    "https://unilag.edu.ng/?p=80123",
+  );
+  assert.throws(() => postUrl({}, "../not-an-id"), /invalid WordPress post ID/);
 });
