@@ -36,11 +36,14 @@ High-priority posts are checked directly by immutable WordPress post ID for 60 d
 after first discovery, including while they remain in the RSS window. The human-facing
 permalink is stored separately because its slug can change. RSS and direct-page hashes are
 stored independently so differences in feed/article rendering cannot create false alerts.
+Linked PDFs hosted on UNILAG are also fingerprinted by their file bytes, so replacing a
+timetable PDF at the same URL is detected even when the WordPress article itself is unchanged.
 Older state entries without priority metadata are checked once (when they have a numeric
 WordPress post ID) to classify and migrate the existing cache. Requests are limited to four
 concurrent posts, time out after 15 seconds, and use `ETag` / `Last-Modified` validators
-when the server provides them. A direct-fetch failure never changes the saved fingerprints;
-HTTP 304 responses are treated as unchanged. Non-priority legacy posts are marked so they
+when the server provides them. UNILAG-hosted PDFs are limited to 25 MiB per file; external
+PDFs are tracked by URL but not downloaded. A direct-fetch failure never changes the saved
+fingerprints; HTTP 304 responses revalidate linked PDFs before treating a post as unchanged. Non-priority legacy posts are marked so they
 do not consume requests on later runs.
 
 ### Guarantees
