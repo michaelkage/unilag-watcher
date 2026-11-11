@@ -10,6 +10,7 @@ const RETENTION_DAYS = 180;
 export const DEEP_POLL_DAYS = 60;
 export const DEEP_POLL_CONCURRENCY = 4;
 const REQUEST_TIMEOUT_MS = 15_000;
+const MAX_PDF_BYTES = 25 * 1024 * 1024;
 const PRIORITY_PATTERN = /\b(?:time\s*table|schedule|examinations?|exams?|lectures?|academic\s+calendar)\b/i;
 const SEED = process.argv.includes("--seed");
 const DRY_RUN = process.argv.includes("--dry-run");
@@ -191,26 +192,138 @@ export function postUrl(entry, id) {
   return "https://unilag.edu.ng/?p=" + encodeURIComponent(String(id));
 }
 
+async function fetchPdfFingerprints(urls, previousHashes = {}, previousValidators = {}) {
+  const hashes = {};
+  const validators = {};
+
+  for (const rawUrl of urls) {
+    const url = new URL(rawUrl);
+    if (url.protocol !== "https:") throw new Error("refusing non-HTTPS PDF attachment: " + rawUrl);
+
+    // Only download attachments hosted by UNILAG. External PDF links are still
+    // represented in the aggregate fingerprint by URL, but are not fetched.
+    if (!["unilag.edu.ng", "www.unilag.edu.ng"].includes(url.hostname)) {
+      hashes[rawUrl] = "external";
+      continue;
+    }
+
+    const previous = previousValidators[rawUrl] ?? {};
+    const headers = { "user-agent": UA, accept: "application/pdf,application/octet-stream" };
+    if (previous.etag) headers["if-none-match"] = previous.etag;
+    if (previous.lastModified) headers["if-modified-since"] = previous.lastModified;
+
+    const response = await fetch(rawUrl, {
+      headers,
+      redirect: "follow",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+
+    if (response.status === 304) {
+      if (!previousHashes[rawUrl]) throw new Error("PDF returned 304 without a cached fingerprint: " + rawUrl);
+      hashes[rawUrl] = previousHashes[rawUrl];
+      validators[rawUrl] = previous;
+      continue;
+    }
+    if (!response.ok) throw new Error("PDF HTTP " + response.status + ": " + rawUrl);
+
+    const finalUrl = new URL(response.url || rawUrl);
+    if (finalUrl.protocol !== "https:" || !["unilag.edu.ng", "www.unilag.edu.ng"].includes(finalUrl.hostname)) {
+      throw new Error("PDF redirected outside UNILAG: " + rawUrl);
+    }
+
+    const declaredLength = Number(response.headers.get("content-length") || 0);
+    if (declaredLength > MAX_PDF_BYTES) throw new Error("PDF exceeds 25 MiB limit: " + rawUrl);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > MAX_PDF_BYTES) throw new Error("PDF exceeds 25 MiB limit: " + rawUrl);
+    if (!bytes.subarray(0, 1024).includes(Buffer.from("%PDF-"))) {
+      throw new Error("attachment response is not a valid PDF: " + rawUrl);
+    }
+
+    hashes[rawUrl] = createHash("sha256").update(bytes).digest("hex");
+    validators[rawUrl] = {
+      etag: response.headers.get("etag") || previous.etag || null,
+      lastModified: response.headers.get("last-modified") || previous.lastModified || null,
+    };
+  }
+
+  return { hashes, validators };
+}
+
+const combinedDeepHash = (bodyHash, pdfHashes) => {
+  const attachments = Object.entries(pdfHashes).sort(([a], [b]) => a.localeCompare(b));
+  return createHash("sha256")
+    .update(bodyHash)
+    .update(JSON.stringify(attachments))
+    .digest("hex")
+    .slice(0, 16);
+};
+
 async function fetchPriorityPost(id, entry) {
   const url = postUrl(entry, id);
   const headers = { "user-agent": UA, accept: "text/html,application/xhtml+xml" };
-  if (entry.etag) headers["if-none-match"] = entry.etag;
-  if (entry.lastModified) headers["if-modified-since"] = entry.lastModified;
-  const response = await fetch(url, { headers, redirect: "follow", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-  if (response.status === 304) return { notModified: true, url };
-  if (!response.ok) throw new Error("HTTP " + response.status);
+  if (entry.etag && (entry.deepBodyHash || entry.deepHash)) headers["if-none-match"] = entry.etag;
+  if (entry.lastModified && (entry.deepBodyHash || entry.deepHash)) headers["if-modified-since"] = entry.lastModified;
+
+  const response = await fetch(url, {
+    headers,
+    redirect: "follow",
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
   const finalUrl = new URL(response.url || url);
   if (!["unilag.edu.ng", "www.unilag.edu.ng"].includes(finalUrl.hostname)) {
     throw new Error("redirected outside unilag.edu.ng (" + finalUrl.hostname + ")");
   }
+
+  if (response.status === 304) {
+    const bodyHash = entry.deepBodyHash || entry.deepHash;
+    if (!bodyHash) throw new Error("post returned 304 without a cached body fingerprint: " + id);
+    const pdfs = entry.pdfs ?? [];
+    const { hashes, validators } = await fetchPdfFingerprints(
+      pdfs,
+      entry.pdfHashes ?? {},
+      entry.pdfValidators ?? {},
+    );
+    const item = {
+      id: String(id),
+      title: entry.title || "UNILAG announcement",
+      link: entry.link || finalUrl.href,
+      pdfs,
+      hash: combinedDeepHash(bodyHash, hashes),
+    };
+    return {
+      notModified: true,
+      item,
+      deepBodyHash: bodyHash,
+      pdfHashes: hashes,
+      pdfValidators: validators,
+      etag: response.headers.get("etag") || entry.etag || null,
+      lastModified: response.headers.get("last-modified") || entry.lastModified || null,
+      url: item.link,
+    };
+  }
+
+  if (!response.ok) throw new Error("HTTP " + response.status);
   const html = await response.text();
   if (/class=["'][^"']*(?:error404|not-found)[^"']*["']/i.test(html) ||
       /<title[^>]*>[^<]*(?:page not found|404)[^<]*<\/title>/i.test(html)) {
     throw new Error("WordPress returned a not-found page");
   }
+
   const item = parsePostPage(html, finalUrl.href, id);
+  const deepBodyHash = item.hash;
+  const { hashes, validators } = await fetchPdfFingerprints(
+    item.pdfs,
+    entry.pdfHashes ?? {},
+    entry.pdfValidators ?? {},
+  );
+  item.hash = combinedDeepHash(deepBodyHash, hashes);
+
   return {
-    item, etag: response.headers.get("etag") || entry.etag || null,
+    item,
+    deepBodyHash,
+    pdfHashes: hashes,
+    pdfValidators: validators,
+    etag: response.headers.get("etag") || entry.etag || null,
     lastModified: response.headers.get("last-modified") || entry.lastModified || null,
     url: item.link,
   };
