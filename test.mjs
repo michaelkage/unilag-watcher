@@ -141,6 +141,8 @@ test("priority feed metadata flags timetable posts and PDF attachments", () => {
   const [timetable, ordinary] = parseFeed(FEED);
   assert.equal(timetable.priority, true);
   assert.equal(ordinary.priority, false);
+  const exampleOnly = parseFeed(FEED.replace("Staff School at 60", "Example of a campus event"));
+  assert.equal(exampleOnly[1].priority, false, "the word example must not accidentally match exam");
 });
 
 test("parsePostPage fingerprints article content, not site navigation", () => {
