@@ -308,8 +308,9 @@ async function fetchPriorityPost(id, entry) {
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   const finalUrl = new URL(response.url || url);
-  if (!["unilag.edu.ng", "www.unilag.edu.ng"].includes(finalUrl.hostname)) {
-    throw new Error("redirected outside unilag.edu.ng (" + finalUrl.hostname + ")");
+  if (finalUrl.protocol !== "https:" ||
+      !["unilag.edu.ng", "www.unilag.edu.ng"].includes(finalUrl.hostname)) {
+    throw new Error("redirected outside HTTPS UNILAG (" + finalUrl.href + ")");
   }
 
   if (response.status === 304) {
