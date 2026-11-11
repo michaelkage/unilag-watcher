@@ -412,7 +412,24 @@ async function main() {
         console.warn("[" + source.id + "] deep-poll " + id + " failed: " + result.error.message + " — retaining previous fingerprints");
         continue;
       }
-      if (result.notModified) continue;
+      if (result.notModified) {
+        const item = result.item;
+        if (deepPageChanged(entry, item) &&
+            !changes.some((change) => change.item.id === id)) {
+          changes.push({ kind: "updated", item });
+        }
+        seen[id] = {
+          ...entry,
+          deepHash: item.hash,
+          deepBodyHash: result.deepBodyHash,
+          pdfHashes: result.pdfHashes,
+          pdfValidators: result.pdfValidators,
+          pdfs: item.pdfs,
+          etag: result.etag,
+          lastModified: result.lastModified,
+        };
+        continue;
+      }
 
       const item = result.item;
       const wasPriority = entry.priority === true;
@@ -442,6 +459,9 @@ async function main() {
       seen[id] = {
         ...entry,
         deepHash: item.hash,
+        deepBodyHash: result.deepBodyHash,
+        pdfHashes: result.pdfHashes,
+        pdfValidators: result.pdfValidators,
         link: result.url,
         title: item.title,
         pdfs: item.pdfs,
