@@ -298,7 +298,12 @@ async function main() {
         seen[id] = { ...entry, priority: false, link: result.url, title: item.title, pdfs: item.pdfs };
         continue;
       }
-      if (entry.hash && entry.hash !== item.hash) changes.push({ kind: "updated", item });
+      // Legacy entries have no priority flag and may have a feed hash that is
+      // not byte-for-byte comparable to the article extraction. Establish a
+      // direct-page baseline once; only already-tagged posts can alert here.
+      if (entry.priority === true && entry.hash && entry.hash !== item.hash) {
+        changes.push({ kind: "updated", item });
+      }
       seen[id] = {
         ...entry, hash: item.hash, link: result.url, title: item.title, pdfs: item.pdfs,
         priority: true, etag: result.etag, lastModified: result.lastModified,
