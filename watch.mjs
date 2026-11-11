@@ -120,6 +120,11 @@ export function pruneSeen(seen, now = Date.now()) {
   return { kept, dropped };
 }
 
+export const deepPageChanged = (entry, item) =>
+  entry.priority === true &&
+  typeof entry.deepHash === "string" &&
+  entry.deepHash !== item.hash;
+
 export function isWithinDeepPollWindow(entry, now = Date.now()) {
   const firstSeen = Date.parse(entry.firstSeen ?? "");
   return Number.isFinite(firstSeen) && firstSeen <= now && firstSeen >= now - DEEP_POLL_DAYS * 86_400_000;
@@ -316,7 +321,7 @@ async function main() {
       // RSS and article-page extraction are different representations.
       // Keep their fingerprints separate to prevent cross-format false alerts.
       // A legacy post gets a direct-page baseline on its first successful poll.
-      if (wasPriority && entry.deepHash && entry.deepHash !== item.hash &&
+      if (deepPageChanged(entry, item) &&
           !changes.some((change) => change.item.id === id)) {
         changes.push({ kind: "updated", item });
       }
