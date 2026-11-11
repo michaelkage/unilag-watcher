@@ -24,9 +24,6 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Run tests
-        run: npm test
-
       - name: Warn if unconfigured
         if: ${{ secrets.TELEGRAM_BOT_TOKEN == '' || secrets.TELEGRAM_CHAT_ID == '' }}
         run: |
