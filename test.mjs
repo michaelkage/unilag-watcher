@@ -11,6 +11,8 @@ import {
   renderEntries,
   splitMessage,
   pruneSeen,
+  parsePostPage,
+  isWithinDeepPollWindow,
 } from "./watch.mjs";
 
 const FEED = `<?xml version="1.0"?>
@@ -132,4 +134,35 @@ test("splitMessage never drops or truncates an entry when output overflows", () 
   for (let n = 0; n < 40; n++) {
     assert.match(joined, new RegExp(`Post number ${n} `), `entry ${n} was lost`);
   }
+});
+
+test("priority feed metadata flags timetable posts and PDF attachments", () => {
+  const [timetable, ordinary] = parseFeed(FEED);
+  assert.equal(timetable.priority, true);
+  assert.equal(ordinary.priority, false);
+});
+
+test("parsePostPage fingerprints article content, not site navigation", () => {
+  const page = `<!doctype html><html><head><title>GST Examination Timetable | University of Lagos</title></head>
+  <body><nav>Navigation that must not affect the hash</nav><article>
+  <h1 class="entry-title">GST Examination Timetable</h1>
+  <div class="entry-content"><p>Exam starts at 9am in Hall A.</p>
+  <a href="/wp-content/uploads/exam.pdf">Download</a></div>
+  </article><footer>Footer text must not affect the hash</footer></body></html>`;
+  const parsed = parsePostPage(page, "https://unilag.edu.ng/?p=80123", "80123");
+  assert.equal(parsed.title, "GST Examination Timetable");
+  assert.match(parsed.text, /Exam starts at 9am in Hall A/);
+  assert.equal(parsed.priority, true);
+  assert.deepEqual(parsed.pdfs, ["https://unilag.edu.ng/wp-content/uploads/exam.pdf"]);
+  const cosmetic = page.replace("Navigation that must not affect the hash", "Different navigation")
+    .replace("Footer text must not affect the hash", "Different footer");
+  assert.equal(parsePostPage(cosmetic, "https://unilag.edu.ng/?p=80123", "80123").hash, parsed.hash);
+});
+
+test("deep-poll window uses firstSeen and excludes records older than 60 days", () => {
+  const now = Date.parse("2026-11-11T00:00:00Z");
+  assert.equal(isWithinDeepPollWindow({ firstSeen: "2026-10-12T00:00:00Z" }, now), true);
+  assert.equal(isWithinDeepPollWindow({ firstSeen: "2026-09-01T00:00:00Z" }, now), false);
+  assert.equal(isWithinDeepPollWindow({ firstSeen: "2026-11-12T00:00:00Z" }, now), false);
+  assert.equal(isWithinDeepPollWindow({}, now), false);
 });
