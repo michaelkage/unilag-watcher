@@ -14,6 +14,7 @@ import {
   parsePostPage,
   isWithinDeepPollWindow,
   postUrl,
+  deepPageChanged,
 } from "./watch.mjs";
 
 const FEED = `<?xml version="1.0"?>
@@ -177,4 +178,27 @@ test("deep polling always uses immutable WordPress post IDs, not mutable slugs",
     "https://unilag.edu.ng/?p=80123",
   );
   assert.throws(() => postUrl({}, "../not-an-id"), /invalid WordPress post ID/);
+});
+
+
+test("RSS and deep-page fingerprints are compared only within their own formats", () => {
+  const item = { hash: "direct-page-hash" };
+  assert.equal(deepPageChanged({
+    priority: true,
+    hash: "rss-hash",
+    deepHash: "direct-page-hash",
+  }, item), false);
+  assert.equal(deepPageChanged({
+    priority: true,
+    hash: "rss-hash",
+    deepHash: "previous-direct-hash",
+  }, item), true);
+  assert.equal(deepPageChanged({
+    priority: true,
+    hash: "rss-hash",
+  }, item), false, "the first direct poll establishes a baseline");
+  assert.equal(deepPageChanged({
+    priority: false,
+    deepHash: "previous-direct-hash",
+  }, item), false);
 });
