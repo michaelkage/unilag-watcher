@@ -276,7 +276,9 @@ async function main() {
     // Legacy records have no stored title/link/priority. Poll numeric IDs once
     // to classify them, then retain only posts identified as high priority.
     const candidates = Object.entries(seen).filter(([id, entry]) =>
-      /^\d+$/.test(id) && !feedIds.has(id) && entry.priority !== false && isWithinDeepPollWindow(entry, nowMs));
+      /^\\d+$/.test(id) &&
+      isWithinDeepPollWindow(entry, nowMs) &&
+      (entry.priority === true || (!feedIds.has(id) && entry.priority !== false)));
 
     const deepResults = await mapLimit(candidates, DEEP_POLL_CONCURRENCY,
       ([id, entry]) => fetchPriorityPost(id, entry));
@@ -286,19 +288,22 @@ async function main() {
       const entry = seen[id];
       const result = deepResults[index];
       totalDeepChecked++;
+
       if (result.error) {
         totalDeepFailed++;
-        console.warn("[" + source.id + "] deep-poll " + id + " failed: " + result.error.message + " — retaining previous fingerprint");
+        console.warn("[" + source.id + "] deep-poll " + id + " failed: " + result.error.message + " — retaining previous fingerprints");
         continue;
       }
       if (result.notModified) continue;
+
       const item = result.item;
-      if (!item.priority) {
-        // Never demote a post already tagged from its RSS payload: the HTML
-        // template may expose fewer attachment/text details than the feed.
+      const wasPriority = entry.priority === true;
+      if (!wasPriority && !item.priority) {
+        // One-time migration check for older state entries. Non-priority
+        // records are marked false so they do not consume requests again.
         seen[id] = {
           ...entry,
-          priority: entry.priority === true,
+          priority: false,
           link: result.url,
           title: item.title,
           pdfs: item.pdfs,
@@ -307,15 +312,24 @@ async function main() {
         };
         continue;
       }
-      // Legacy entries have no priority flag and may have a feed hash that is
-      // not byte-for-byte comparable to the article extraction. Establish a
-      // direct-page baseline once; only already-tagged posts can alert here.
-      if (entry.priority === true && entry.hash && entry.hash !== item.hash) {
+
+      // RSS and article-page extraction are different representations.
+      // Keep their fingerprints separate to prevent cross-format false alerts.
+      // A legacy post gets a direct-page baseline on its first successful poll.
+      if (wasPriority && entry.deepHash && entry.deepHash !== item.hash &&
+          !changes.some((change) => change.item.id === id)) {
         changes.push({ kind: "updated", item });
       }
+
       seen[id] = {
-        ...entry, hash: item.hash, link: result.url, title: item.title, pdfs: item.pdfs,
-        priority: true, etag: result.etag, lastModified: result.lastModified,
+        ...entry,
+        deepHash: item.hash,
+        link: result.url,
+        title: item.title,
+        pdfs: item.pdfs,
+        priority: true,
+        etag: result.etag,
+        lastModified: result.lastModified,
       };
     }
 
