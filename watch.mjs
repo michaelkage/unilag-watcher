@@ -123,6 +123,7 @@ export function pruneSeen(seen, now = Date.now()) {
 
 export const deepPageChanged = (entry, item) =>
   entry.priority === true &&
+  entry.deepHashVersion === 2 &&
   typeof entry.deepHash === "string" &&
   entry.deepHash !== item.hash;
 
@@ -249,7 +250,7 @@ async function fetchPdfFingerprints(urls, previousHashes = {}, previousValidator
   return { hashes, validators };
 }
 
-const combinedDeepHash = (bodyHash, pdfHashes) => {
+export const combinedDeepHash = (bodyHash, pdfHashes) => {
   const attachments = Object.entries(pdfHashes).sort(([a], [b]) => a.localeCompare(b));
   return createHash("sha256")
     .update(bodyHash)
@@ -421,6 +422,7 @@ async function main() {
         seen[id] = {
           ...entry,
           deepHash: item.hash,
+          deepHashVersion: 2,
           deepBodyHash: result.deepBodyHash,
           pdfHashes: result.pdfHashes,
           pdfValidators: result.pdfValidators,
@@ -459,6 +461,7 @@ async function main() {
       seen[id] = {
         ...entry,
         deepHash: item.hash,
+        deepHashVersion: 2,
         deepBodyHash: result.deepBodyHash,
         pdfHashes: result.pdfHashes,
         pdfValidators: result.pdfValidators,
