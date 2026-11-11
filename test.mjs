@@ -159,6 +159,10 @@ test("parsePostPage fingerprints article content, not site navigation", () => {
   assert.match(parsed.text, /Exam starts at 9am in Hall A/);
   assert.equal(parsed.priority, true);
   assert.deepEqual(parsed.pdfs, ["https://unilag.edu.ng/wp-content/uploads/exam.pdf"]);
+  assert.throws(
+    () => parsePostPage(page.replace("<body>", '<body class="postid-999">'), "https://unilag.edu.ng/?p=80123", "80123"),
+    /different post than requested ID/,
+  );
   const cosmetic = page.replace("Navigation that must not affect the hash", "Different navigation")
     .replace("Footer text must not affect the hash", "Different footer");
   assert.equal(parsePostPage(cosmetic, "https://unilag.edu.ng/?p=80123", "80123").hash, parsed.hash);
