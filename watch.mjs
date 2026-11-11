@@ -177,14 +177,13 @@ export function splitMessage(source, changes) {
   return chunks;
 }
 
-function postUrl(entry, id) {
-  const candidate = entry.link || "https://unilag.edu.ng/?p=" + encodeURIComponent(id);
-  let url;
-  try { url = new URL(candidate); } catch { throw new Error("invalid permalink for post " + id); }
-  if (url.protocol !== "https:" || !["unilag.edu.ng", "www.unilag.edu.ng"].includes(url.hostname)) {
-    throw new Error("refusing non-UNILAG permalink for post " + id + ": " + candidate);
+export function postUrl(entry, id) {
+  // Always resolve by the immutable WordPress database ID. The stored
+  // permalink is for human-facing alerts only; its slug can change.
+  if (!/^\\d+$/.test(String(id))) {
+    throw new Error("invalid WordPress post ID: " + id);
   }
-  return url.href;
+  return "https://unilag.edu.ng/?p=" + encodeURIComponent(String(id));
 }
 
 async function fetchPriorityPost(id, entry) {
