@@ -273,10 +273,10 @@ async function main() {
       };
     }
 
-    // Legacy records have no stored title/link/priority. Poll numeric IDs once
-    // to classify them, then retain only posts identified as high priority.
+    // Poll tagged priority posts on every run, including while they remain in
+    // RSS. Unclassified legacy numeric IDs are checked once for migration.
     const candidates = Object.entries(seen).filter(([id, entry]) =>
-      /^\\d+$/.test(id) &&
+      /^\d+$/.test(id) &&
       isWithinDeepPollWindow(entry, nowMs) &&
       (entry.priority === true || (!feedIds.has(id) && entry.priority !== false)));
 
