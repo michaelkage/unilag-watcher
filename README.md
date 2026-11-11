@@ -10,8 +10,9 @@ Zero runtime dependencies. Runs on GitHub Actions every 30 minutes. State lives 
 
 ## How it works
 
-Each run fetches the RSS feeds in `sources.json`, then for every post compares a
-SHA-256 fingerprint of its content against `state.json`:
+Each run fetches the RSS feeds in `sources.json`, then compares a SHA-256 fingerprint
+of each matching post against `state.json`. Timetable, schedule, examination, lecture,
+academic-calendar, and PDF-bearing posts are tagged for targeted deep-polling:
 
 | Condition | Result |
 | --- | --- |
@@ -28,6 +29,17 @@ The feeds carry **full post bodies**, not excerpts — none of UNILAG's items us
 post it was changed.
 
 Any post containing a `.pdf` link has the direct PDF URL included in the alert.
+
+### Priority deep-polling
+
+High-priority posts retain their WordPress permalink and are checked directly for 60 days
+after first discovery, even after they leave the RSS window. Older state entries without
+priority metadata are checked once (when they have a numeric WordPress post ID) so the
+existing cache can be migrated without discarding history. Requests are limited to four
+concurrent posts, time out after 15 seconds, and use `ETag` / `Last-Modified` validators
+when the server provides them. A direct-fetch failure never changes the saved fingerprint;
+HTTP 304 responses are treated as unchanged. Non-priority legacy posts are marked so they
+are not repeatedly fetched.
 
 ### Guarantees
 
@@ -112,8 +124,7 @@ worse than a bit of noise.
   all sources use the apex `unilag.edu.ng`.
 - `portal.unilag.edu.ng` returns 403 to non-browser clients, so portal-gated content
   is not reachable by this watcher.
-- RSS exposes only the most recent ~10 items per feed. A post edited *after* it falls
-  off the feed will not be detected.
+- RSS exposes only the most recent ~10 items per feed. Priority deep-polling closes this blindspot for posts identified as high-priority and first seen within the preceding 60 days. It cannot guarantee detection if UNILAG deletes a post, blocks requests, or serves an incomplete article page.
 - The keyword sources are WordPress *search* results, so loosely-related posts can
   appear. Tighten with `keywords` if that becomes noisy.
 
