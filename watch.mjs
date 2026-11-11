@@ -15,9 +15,9 @@ const SEED = process.argv.includes("--seed");
 const DRY_RUN = process.argv.includes("--dry-run");
 
 export const decodeEntities = (s) =>
-  s.replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, "$1")
+  s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
-    .replace(/&#(\\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
     .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").trim();
 
@@ -27,9 +27,9 @@ const pickTag = (xml, name) => {
 };
 
 export const plainText = (html) =>
-  decodeEntities(html.replace(/<!--[\\s\\S]*?-->/g, " ")
-    .replace(/<(script|style|noscript)\\b[^>]*>[\\s\\S]*?<\\/\\1>/gi, " ")
-    .replace(/<[^>]+>/g, " ").replace(/\\s+/g, " "));
+  decodeEntities(html.replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
 
 export const fingerprint = (text) => createHash("sha256").update(text).digest("hex").slice(0, 16);
 export const escapeHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -40,7 +40,7 @@ export const absolute = (url, base = "https://unilag.edu.ng/") => {
 
 export const findPdfs = (html, base = "https://unilag.edu.ng/") => {
   const urls = new Set();
-  for (const m of html.matchAll(/(?:href|src)=["']([^"']+\\.pdf(?:[?#][^"']*)?)["']/gi)) {
+  for (const m of html.matchAll(/(?:href|src)=["']([^"']+\.pdf(?:[?#][^"']*)?)["']/gi)) {
     const url = absolute(decodeEntities(m[1]), base);
     if (url) urls.add(url);
   }
@@ -54,13 +54,13 @@ const isPriority = (item) => {
 
 export function parseFeed(xml) {
   const items = [];
-  for (const match of xml.matchAll(/<item\\b[^>]*>([\\s\\S]*?)<\\/item>/gi)) {
+  for (const match of xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)) {
     const block = match[1];
     const title = pickTag(block, "title");
     if (!title) continue;
     const link = absolute(pickTag(block, "link"));
     const guid = pickTag(block, "guid");
-    const id = (guid || link).match(/[?&]p=(\\d+)/)?.[1] ?? link ?? fingerprint(title);
+    const id = (guid || link).match(/[?&]p=(\d+)/)?.[1] ?? link ?? fingerprint(title);
     const content = pickTag(block, "content:encoded") || pickTag(block, "description");
     const text = plainText(content);
     const item = {
@@ -76,23 +76,23 @@ export function parseFeed(xml) {
 
 /** Parse the actual WordPress article body, excluding site chrome. */
 export function parsePostPage(html, requestedUrl, id) {
-  const article = html.match(/<article\\b[^>]*>([\\s\\S]*?)<\\/article>/i)?.[1] ?? "";
-  const main = html.match(/<main\\b[^>]*>([\\s\\S]*?)<\\/main>/i)?.[1] ?? "";
+  const article = html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i)?.[1] ?? "";
+  const main = html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i)?.[1] ?? "";
   const scope = article || main;
-  const titleMatch = scope.match(/<[^>]*class=["'][^"']*(?:entry-title|post-title)[^"']*["'][^>]*>([\\s\\S]*?)<\\/[^>]+>/i);
-  const ogTitle = html.match(/<meta\\s+property=["']og:title["']\\s+content=["']([^"']+)["']/i);
-  const documentTitle = html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i);
+  const titleMatch = scope.match(/<[^>]*class=["'][^"']*(?:entry-title|post-title)[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i);
+  const ogTitle = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i);
+  const documentTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
   const title = plainText(decodeEntities(titleMatch?.[1] ?? ogTitle?.[1] ?? documentTitle?.[1] ?? ""))
-    .replace(/\\s*[|–-]\\s*University of Lagos.*$/i, "").trim();
+    .replace(/\s*[|–-]\s*University of Lagos.*$/i, "").trim();
 
   const marker = scope.search(/class=["'][^"']*(?:entry-content|post-content|wp-block-post-content)[^"']*["']/i);
   let bodyHtml = marker >= 0 ? scope.slice(marker) : scope;
-  bodyHtml = bodyHtml.replace(/<(header|footer|nav|aside)\\b[^>]*>[\\s\\S]*?<\\/\\1>/gi, " ")
-    .replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi, " ");
+  bodyHtml = bodyHtml.replace(/<(header|footer|nav|aside)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ");
   const text = plainText(bodyHtml);
   if (!title || !text) throw new Error("post " + id + ": page did not contain a readable article");
 
-  const canonical = html.match(/<link\\b[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1];
+  const canonical = html.match(/<link\b[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1];
   const link = canonical ? absolute(decodeEntities(canonical)) : requestedUrl;
   const item = { id: String(id), title, link, text, pdfs: findPdfs(bodyHtml, link), hash: fingerprint(text + title) };
   item.priority = isPriority(item);
@@ -192,7 +192,7 @@ async function fetchPriorityPost(id, entry) {
   }
   const html = await response.text();
   if (/class=["'][^"']*(?:error404|not-found)[^"']*["']/i.test(html) ||
-      /<title[^>]*>[^<]*(?:page not found|404)[^<]*<\\/title>/i.test(html)) {
+      /<title[^>]*>[^<]*(?:page not found|404)[^<]*<\/title>/i.test(html)) {
     throw new Error("WordPress returned a not-found page");
   }
   const item = parsePostPage(html, finalUrl.href, id);
@@ -268,7 +268,7 @@ async function main() {
     // Legacy records have no stored title/link/priority. Poll numeric IDs once
     // to classify them, then retain only posts identified as high priority.
     const candidates = Object.entries(seen).filter(([id, entry]) =>
-      /^\\d+$/.test(id) && !feedIds.has(id) && entry.priority !== false && isWithinDeepPollWindow(entry, nowMs));
+      /^\d+$/.test(id) && !feedIds.has(id) && entry.priority !== false && isWithinDeepPollWindow(entry, nowMs));
 
     const deepResults = await mapLimit(candidates, DEEP_POLL_CONCURRENCY,
       ([id, entry]) => fetchPriorityPost(id, entry));
