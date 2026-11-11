@@ -418,7 +418,9 @@ async function main() {
       seen[item.id] = {
         ...previous, hash: item.hash, firstSeen: previous?.firstSeen ?? now, lastSeen: now,
         link: item.link || previous?.link || null, title: item.title, pdfs: item.pdfs,
-        priority: item.priority || previous?.priority === true,
+        priority: item.priority ||
+          /(?:timetable|exam|lecture)/i.test(source.id) ||
+          previous?.priority === true,
       };
     }
 
