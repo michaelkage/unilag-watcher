@@ -180,7 +180,7 @@ export function splitMessage(source, changes) {
 export function postUrl(entry, id) {
   // Always resolve by the immutable WordPress database ID. The stored
   // permalink is for human-facing alerts only; its slug can change.
-  if (!/^\\d+$/.test(String(id))) {
+  if (!/^\d+$/.test(String(id))) {
     throw new Error("invalid WordPress post ID: " + id);
   }
   return "https://unilag.edu.ng/?p=" + encodeURIComponent(String(id));
