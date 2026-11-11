@@ -295,7 +295,17 @@ async function main() {
       if (result.notModified) continue;
       const item = result.item;
       if (!item.priority) {
-        seen[id] = { ...entry, priority: false, link: result.url, title: item.title, pdfs: item.pdfs };
+        // Never demote a post already tagged from its RSS payload: the HTML
+        // template may expose fewer attachment/text details than the feed.
+        seen[id] = {
+          ...entry,
+          priority: entry.priority === true,
+          link: result.url,
+          title: item.title,
+          pdfs: item.pdfs,
+          etag: result.etag,
+          lastModified: result.lastModified,
+        };
         continue;
       }
       // Legacy entries have no priority flag and may have a feed hash that is
