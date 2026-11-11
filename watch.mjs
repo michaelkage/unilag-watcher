@@ -86,7 +86,8 @@ export function parsePostPage(html, requestedUrl, id) {
     .replace(/\s*[|–-]\s*University of Lagos.*$/i, "").trim();
 
   const marker = scope.search(/class=["'][^"']*(?:entry-content|post-content|wp-block-post-content)[^"']*["']/i);
-  let bodyHtml = marker >= 0 ? scope.slice(marker) : scope;
+  const contentStart = marker >= 0 ? scope.lastIndexOf("<", marker) : -1;
+  let bodyHtml = contentStart >= 0 ? scope.slice(contentStart) : scope;
   bodyHtml = bodyHtml.replace(/<(header|footer|nav|aside)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ");
   const text = plainText(bodyHtml);
