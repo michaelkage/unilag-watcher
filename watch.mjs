@@ -10,7 +10,7 @@ const RETENTION_DAYS = 180;
 export const DEEP_POLL_DAYS = 60;
 export const DEEP_POLL_CONCURRENCY = 4;
 const REQUEST_TIMEOUT_MS = 15_000;
-const PRIORITY_TERMS = ["timetable", "time table", "schedule", "examination", "exam", "lecture", "academic calendar"];
+const PRIORITY_PATTERN = /\\b(?:time\\s*table|schedule|examinations?|exams?|lectures?|academic\\s+calendar)\\b/i;
 const SEED = process.argv.includes("--seed");
 const DRY_RUN = process.argv.includes("--dry-run");
 
@@ -50,7 +50,7 @@ export const findPdfs = (html, base = "https://unilag.edu.ng/") => {
 
 const isPriority = (item) => {
   const haystack = (item.title || "") + " " + (item.text || "");
-  return Boolean(item.pdfs?.length) || PRIORITY_TERMS.some((term) => haystack.toLowerCase().includes(term));
+  return Boolean(item.pdfs?.length) || PRIORITY_PATTERN.test(haystack);
 };
 
 export function parseFeed(xml) {
