@@ -193,6 +193,28 @@ export function postUrl(entry, id) {
   return "https://unilag.edu.ng/?p=" + encodeURIComponent(String(id));
 }
 
+async function readLimitedBody(response, maxBytes, label) {
+  if (!response.body) throw new Error("empty response body: " + label);
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error("download exceeds 25 MiB limit: " + label);
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, total);
+}
+
 async function fetchPdfFingerprints(urls, previousHashes = {}, previousValidators = {}) {
   const hashes = {};
   const validators = {};
@@ -234,8 +256,7 @@ async function fetchPdfFingerprints(urls, previousHashes = {}, previousValidator
 
     const declaredLength = Number(response.headers.get("content-length") || 0);
     if (declaredLength > MAX_PDF_BYTES) throw new Error("PDF exceeds 25 MiB limit: " + rawUrl);
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (bytes.length > MAX_PDF_BYTES) throw new Error("PDF exceeds 25 MiB limit: " + rawUrl);
+    const bytes = await readLimitedBody(response, MAX_PDF_BYTES, rawUrl);
     if (!bytes.subarray(0, 1024).includes(Buffer.from("%PDF-"))) {
       throw new Error("attachment response is not a valid PDF: " + rawUrl);
     }
