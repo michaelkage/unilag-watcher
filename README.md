@@ -32,14 +32,16 @@ Any post containing a `.pdf` link has the direct PDF URL included in the alert.
 
 ### Priority deep-polling
 
-High-priority posts retain their WordPress permalink and are checked directly for 60 days
-after first discovery, even after they leave the RSS window. Older state entries without
-priority metadata are checked once (when they have a numeric WordPress post ID) so the
-existing cache can be migrated without discarding history. Requests are limited to four
+High-priority posts are checked directly by immutable WordPress post ID for 60 days
+after first discovery, including while they remain in the RSS window. The human-facing
+permalink is stored separately because its slug can change. RSS and direct-page hashes are
+stored independently so differences in feed/article rendering cannot create false alerts.
+Older state entries without priority metadata are checked once (when they have a numeric
+WordPress post ID) to classify and migrate the existing cache. Requests are limited to four
 concurrent posts, time out after 15 seconds, and use `ETag` / `Last-Modified` validators
-when the server provides them. A direct-fetch failure never changes the saved fingerprint;
+when the server provides them. A direct-fetch failure never changes the saved fingerprints;
 HTTP 304 responses are treated as unchanged. Non-priority legacy posts are marked so they
-are not repeatedly fetched.
+do not consume requests on later runs.
 
 ### Guarantees
 
