@@ -278,7 +278,7 @@ async function fetchPriorityPost(id, entry) {
   if (response.status === 304) {
     const bodyHash = entry.deepBodyHash || entry.deepHash;
     if (!bodyHash) throw new Error("post returned 304 without a cached body fingerprint: " + id);
-    const pdfs = entry.pdfs ?? [];
+    const pdfs = entry.deepPdfs ?? entry.pdfs ?? [];
     const { hashes, validators } = await fetchPdfFingerprints(
       pdfs,
       entry.pdfHashes ?? {},
@@ -427,6 +427,7 @@ async function main() {
           pdfHashes: result.pdfHashes,
           pdfValidators: result.pdfValidators,
           pdfs: item.pdfs,
+          deepPdfs: item.pdfs,
           etag: result.etag,
           lastModified: result.lastModified,
         };
@@ -468,6 +469,7 @@ async function main() {
         link: result.url,
         title: item.title,
         pdfs: item.pdfs,
+        deepPdfs: item.pdfs,
         priority: true,
         etag: result.etag,
         lastModified: result.lastModified,
