@@ -5,281 +5,613 @@ import { pathToFileURL } from "node:url";
 const STATE_FILE = new URL("./state.json", import.meta.url);
 const SOURCES_FILE = new URL("./sources.json", import.meta.url);
 const STATE_VERSION = 1;
-const UA = "unilag-watcher/1.0 (+https://github.com/michaelkage/unilag-watcher)";
-
-// Forget posts unseen for this long so state.json cannot grow without bound.
+const UA = "unilag-watcher/1.1 (+https://github.com/michaelkage/unilag-watcher)";
 const RETENTION_DAYS = 180;
-
+export const DEEP_POLL_DAYS = 60;
+export const DEEP_POLL_CONCURRENCY = 4;
+const REQUEST_TIMEOUT_MS = 15_000;
+const MAX_PDF_BYTES = 25 * 1024 * 1024;
+const PRIORITY_PATTERN = /\b(?:time\s*tables?|schedules?|examinations?|exams?|lectures?|academic\s+calendars?)\b/i;
 const SEED = process.argv.includes("--seed");
 const DRY_RUN = process.argv.includes("--dry-run");
 
-// ---------- helpers ----------
-
 export const decodeEntities = (s) =>
-  s
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+  s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
     .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .trim();
+    .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").trim();
 
 const pickTag = (xml, name) => {
-  const m = xml.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, "i"));
+  const m = xml.match(new RegExp("<" + name + "(?:\\s[^>]*)?>([\\s\\S]*?)</" + name + ">", "i"));
   return m ? decodeEntities(m[1]) : "";
 };
 
-// Strip markup so that cosmetic edits (whitespace, tracking attrs) do not
-// register as content changes, but real text edits do.
 export const plainText = (html) =>
-  decodeEntities(html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
+  decodeEntities(html.replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ").replace(/\s+/g, " "));
 
-export const fingerprint = (text) =>
-  createHash("sha256").update(text).digest("hex").slice(0, 16);
+export const fingerprint = (text) => createHash("sha256").update(text).digest("hex").slice(0, 16);
+export const escapeHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-export const escapeHtml = (s) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+export const absolute = (url, base = "https://unilag.edu.ng/") => {
+  if (!url) return "";
+  try { return new URL(url, base).href; } catch { return ""; }
+};
 
-export const findPdfs = (xml) => {
+export const findPdfs = (html, base = "https://unilag.edu.ng/") => {
   const urls = new Set();
-  for (const m of xml.matchAll(/href=["']([^"']+\.pdf(?:\?[^"']*)?)["']/gi)) {
-    urls.add(decodeEntities(m[1]));
+  for (const m of html.matchAll(/(?:href|src)=["']([^"']+\.pdf(?:[?#][^"']*)?)["']/gi)) {
+    const url = absolute(decodeEntities(m[1]), base);
+    if (url) urls.add(url);
   }
   return [...urls];
 };
 
-const absolute = (url) =>
-  url.startsWith("//") ? `https:${url}` : url.startsWith("/") ? `https://unilag.edu.ng${url}` : url;
-
-// ---------- feed parsing ----------
+const isPriority = (item) => {
+  const haystack = (item.title || "") + " " + (item.text || "");
+  return Boolean(item.pdfs?.length) || PRIORITY_PATTERN.test(haystack);
+};
 
 export function parseFeed(xml) {
   const items = [];
-  for (const match of xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)) {
+  for (const match of xml.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)) {
     const block = match[1];
     const title = pickTag(block, "title");
     if (!title) continue;
-
-    const link = pickTag(block, "link");
+    const link = absolute(pickTag(block, "link"));
     const guid = pickTag(block, "guid");
-    // WordPress exposes a stable numeric post ID via ?p=NNNNN. Prefer it over
-    // the URL, which changes when a post slug is edited.
-    const idFromUrl = (guid || link).match(/[?&]p=(\d+)/)?.[1];
-    const id = idFromUrl ?? link ?? fingerprint(title);
-
-    const content =
-      pickTag(block, "content:encoded") || pickTag(block, "description");
-
-    items.push({
-      id: String(id),
-      title,
-      link,
-      pubDate: pickTag(block, "pubDate"),
-      category: pickTag(block, "category"),
-      text: plainText(content),
-      hash: fingerprint(plainText(content) + title),
-      pdfs: findPdfs(block).map(absolute),
-    });
+    const id = (guid || link).match(/[?&]p=(\d+)/)?.[1] ?? link ?? fingerprint(title);
+    const content = pickTag(block, "content:encoded") || pickTag(block, "description");
+    const text = plainText(content);
+    const item = {
+      id: String(id), title, link, pubDate: pickTag(block, "pubDate"),
+      category: pickTag(block, "category"), text, hash: fingerprint(text + title),
+      pdfs: findPdfs(block, link || undefined),
+    };
+    item.priority = isPriority(item);
+    items.push(item);
   }
   return items;
 }
 
-// ---------- state ----------
+/** Parse the actual WordPress article body, excluding site chrome. */
+export function parsePostPage(html, requestedUrl, id) {
+  const bodyClass = html.match(/<body\b[^>]*class=["']([^"']+)["']/i)?.[1] ?? "";
+  const bodyPostId = bodyClass.match(/\bpostid-(\d+)\b/i)?.[1];
+  const articlePostId = html.match(/<article\b[^>]*id=["']post-(\d+)["']/i)?.[1];
+  if (!bodyPostId && !articlePostId) {
+    throw new Error("WordPress page did not expose a verifiable post ID for requested ID " + id);
+  }
+  if ((bodyPostId && bodyPostId !== String(id)) ||
+      (articlePostId && articlePostId !== String(id))) {
+    throw new Error("WordPress returned a different post than requested ID " + id);
+  }
+  const article = html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i)?.[1] ?? "";
+  const main = html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/i)?.[1] ?? "";
+  const scope = article || main;
+  const titleMatch = scope.match(/<[^>]*class=["'][^"']*(?:entry-title|post-title)[^"']*["'][^>]*>([\s\S]*?)<\/[^>]+>/i);
+  const ogTitle = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i);
+  const documentTitle = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title = plainText(decodeEntities(titleMatch?.[1] ?? ogTitle?.[1] ?? documentTitle?.[1] ?? ""))
+    .replace(/\s*[|–-]\s*University of Lagos.*$/i, "").trim();
 
-// Drop entries not seen for RETENTION_DAYS. Feeds only ever expose a recent
-// window, so these can no longer be compared against anything.
+  const marker = scope.search(/class=["'][^"']*(?:entry-content|post-content|wp-block-post-content)[^"']*["']/i);
+  const contentStart = marker >= 0 ? scope.lastIndexOf("<", marker) : -1;
+  let bodyHtml = contentStart >= 0 ? scope.slice(contentStart) : scope;
+  bodyHtml = bodyHtml.replace(/<(header|footer|nav|aside)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ");
+  const text = plainText(bodyHtml);
+  if (!title || !text) throw new Error("post " + id + ": page did not contain a readable article");
+
+  const canonical = html.match(/<link\b[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["']/i)?.[1];
+  const canonicalUrl = canonical ? absolute(decodeEntities(canonical)) : "";
+  let link = requestedUrl;
+  if (canonicalUrl) {
+    try {
+      const parsedCanonical = new URL(canonicalUrl);
+      if (parsedCanonical.protocol === "https:" && ["unilag.edu.ng", "www.unilag.edu.ng"].includes(parsedCanonical.hostname)) {
+        if (parsedCanonical.hostname === "www.unilag.edu.ng") parsedCanonical.hostname = "unilag.edu.ng";
+        link = parsedCanonical.href;
+      }
+    } catch { /* retain the already-validated requested permalink */ }
+  }
+  const item = { id: String(id), title, link, text, pdfs: findPdfs(bodyHtml, link), hash: fingerprint(text + title) };
+  item.priority = isPriority(item);
+  return item;
+}
+
 export function pruneSeen(seen, now = Date.now()) {
   const cutoff = now - RETENTION_DAYS * 86_400_000;
   const kept = {};
   let dropped = 0;
-
   for (const [id, entry] of Object.entries(seen)) {
     const seenAt = Date.parse(entry.lastSeen ?? "");
     if (!Number.isFinite(seenAt) || seenAt >= cutoff) kept[id] = entry;
     else dropped++;
   }
-
   return { kept, dropped };
+}
+
+export const deepPageChanged = (entry, item) =>
+  entry.priority === true &&
+  entry.deepHashVersion === 2 &&
+  typeof entry.deepHash === "string" &&
+  entry.deepHash !== item.hash;
+
+export function isWithinDeepPollWindow(entry, now = Date.now()) {
+  const firstSeen = Date.parse(entry.firstSeen ?? "");
+  return Number.isFinite(firstSeen) && firstSeen <= now && firstSeen >= now - DEEP_POLL_DAYS * 86_400_000;
 }
 
 async function loadState() {
   try {
     const parsed = JSON.parse(await readFile(STATE_FILE, "utf8"));
     if (parsed.version !== STATE_VERSION) {
-      console.warn(`state.json version ${parsed.version} != ${STATE_VERSION}, starting fresh`);
+      console.warn("state.json version " + parsed.version + " != " + STATE_VERSION + ", starting fresh");
       return { version: STATE_VERSION, lastChange: null, sources: {} };
     }
     return parsed;
   } catch (err) {
-    if (err.code !== "ENOENT") console.warn(`could not read state.json (${err.message}), starting fresh`);
+    if (err.code !== "ENOENT") console.warn("could not read state.json (" + err.message + "), starting fresh");
     return { version: STATE_VERSION, lastChange: null, sources: {} };
   }
 }
 
-// ---------- telegram ----------
-
 async function sendTelegram(text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId) {
-    throw new Error("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set");
-  }
-
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: "HTML",
-      disable_web_page_preview: false,
-    }),
+  if (!token || !chatId) throw new Error("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set");
+  const res = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", disable_web_page_preview: false }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
-
-  if (!res.ok) throw new Error(`telegram ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error("telegram " + res.status + ": " + await res.text());
 }
 
-// Telegram caps a message at 4096 chars. Keep well clear of that.
 const MAX_MESSAGE = 3800;
 
 export function renderEntries(source, entries) {
-  const body = entries
-    .map((change) => {
-      const badge = change.kind === "new" ? "🆕 NEW" : "✏️ UPDATED";
-      const lines = [
-        `${badge}  <a href="${escapeHtml(change.item.link)}">${escapeHtml(change.item.title)}</a>`,
-      ];
-      for (const pdf of change.item.pdfs.slice(0, 3)) lines.push(`📄 ${escapeHtml(pdf)}`);
-      return lines.join("\n");
-    })
-    .join("\n\n");
-
-  return `<b>${escapeHtml(source.label)}</b>\n\n${body}`;
+  const body = entries.map((change) => {
+    const badge = change.kind === "new" ? "🆕 NEW" : "✏️ UPDATED";
+    const lines = [badge + '  <a href="' + escapeHtml(change.item.link) + '">' + escapeHtml(change.item.title) + "</a>"];
+    for (const pdf of (change.item.pdfs ?? []).slice(0, 3)) lines.push("📄 " + escapeHtml(pdf));
+    return lines.join("\n");
+  }).join("\n\n");
+  return "<b>" + escapeHtml(source.label) + "</b>\n\n" + body;
 }
 
 export function splitMessage(source, changes) {
-  // Greedy pack: keep as many entries per message as fit, never split an entry.
   const chunks = [];
   let current = [];
-
   for (const change of changes) {
     const candidate = [...current, change];
     if (current.length && renderEntries(source, candidate).length > MAX_MESSAGE) {
       chunks.push(renderEntries(source, current));
       current = [change];
-    } else {
-      current = candidate;
-    }
+    } else current = candidate;
   }
   if (current.length) chunks.push(renderEntries(source, current));
   return chunks;
 }
 
-// ---------- main ----------
+export function postUrl(entry, id) {
+  // Always resolve by the immutable WordPress database ID. The stored
+  // permalink is for human-facing alerts only; its slug can change.
+  if (!/^\d+$/.test(String(id))) {
+    throw new Error("invalid WordPress post ID: " + id);
+  }
+  return "https://unilag.edu.ng/?p=" + encodeURIComponent(String(id));
+}
+
+const UNILAG_HOSTS = new Set(["unilag.edu.ng", "www.unilag.edu.ng"]);
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+function assertTrustedUnilagUrl(value) {
+  const url = value instanceof URL ? value : new URL(value);
+  if (url.protocol !== "https:" || !UNILAG_HOSTS.has(url.hostname) ||
+      (url.port !== "" && url.port !== "443") || url.username || url.password) {
+    throw new Error("refusing URL outside HTTPS UNILAG: " + url.href);
+  }
+  return url;
+}
+
+/**
+ * Follow only bounded HTTPS redirects that remain on an exact UNILAG host.
+ * Manual redirects prevent fetch from contacting an untrusted Location before
+ * the destination has been validated.
+ */
+export async function fetchUnilag(input, options = {}, maxRedirects = 3) {
+  let url = assertTrustedUnilagUrl(input);
+  for (let redirects = 0; ; redirects++) {
+    const response = await fetch(url.href, { ...options, redirect: "manual" });
+    if (!REDIRECT_STATUSES.has(response.status)) return response;
+
+    const location = response.headers.get("location");
+    await response.body?.cancel().catch(() => {});
+    if (!location) throw new Error("UNILAG redirect omitted Location header: " + url.href);
+    if (redirects >= maxRedirects) {
+      throw new Error("too many UNILAG redirects (maximum " + maxRedirects + "): " + url.href);
+    }
+
+    let destination;
+    try { destination = new URL(location, url); }
+    catch { throw new Error("invalid redirect destination from UNILAG: " + url.href); }
+    url = assertTrustedUnilagUrl(destination);
+  }
+}
+
+async function readLimitedBody(response, maxBytes, label) {
+  if (!response.body) throw new Error("empty response body: " + label);
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error("download exceeds 25 MiB limit: " + label);
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, total);
+}
+
+export async function fetchPdfFingerprints(urls, previousHashes = {}, previousValidators = {}) {
+  const hashes = {};
+  const validators = {};
+  const errors = [];
+
+  for (const rawUrl of urls) {
+    try {
+      const url = new URL(rawUrl);
+
+      // Only download attachments hosted by UNILAG. External PDF links are still
+      // represented in the aggregate fingerprint by URL, but are not fetched.
+      if (![...UNILAG_HOSTS].includes(url.hostname)) {
+        hashes[rawUrl] = "external";
+        continue;
+      }
+
+      // The www host has a known certificate problem; normalize its attachments
+      // to the apex host, and upgrade legacy HTTP links to HTTPS.
+      if (url.hostname === "www.unilag.edu.ng") url.hostname = "unilag.edu.ng";
+      if (url.protocol === "http:") url.protocol = "https:";
+      assertTrustedUnilagUrl(url);
+      const requestUrl = url.href;
+
+      const previous = previousValidators[rawUrl] ?? {};
+      const headers = { "user-agent": UA, accept: "application/pdf,application/octet-stream" };
+      if (previous.etag) headers["if-none-match"] = previous.etag;
+      if (previous.lastModified) headers["if-modified-since"] = previous.lastModified;
+
+      const response = await fetchUnilag(requestUrl, {
+        headers,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+
+      if (response.status === 304) {
+        // A 304 is useful only when the cache contains a verified byte digest.
+        // Never let a "pending" marker become permanent after an unsolicited 304.
+        if (!/^[a-f0-9]{64}$/i.test(previousHashes[rawUrl] ?? "")) {
+          throw new Error("PDF returned 304 without a verified cached SHA-256 fingerprint");
+        }
+        hashes[rawUrl] = previousHashes[rawUrl];
+        validators[rawUrl] = previous;
+        continue;
+      }
+      if (!response.ok) throw new Error("PDF HTTP " + response.status);
+
+      const declaredLength = Number(response.headers.get("content-length") || 0);
+      if (declaredLength > MAX_PDF_BYTES) throw new Error("PDF exceeds 25 MiB limit");
+      const bytes = await readLimitedBody(response, MAX_PDF_BYTES, rawUrl);
+      if (!bytes.subarray(0, 1024).includes(Buffer.from("%PDF-"))) {
+        throw new Error("attachment response is not a valid PDF");
+      }
+
+      hashes[rawUrl] = createHash("sha256").update(bytes).digest("hex");
+      // A 200 response starts a new representation. Do not carry validators
+      // forward when the origin omits them; stale validators can cause a false 304.
+      validators[rawUrl] = {
+        etag: response.headers.get("etag") || null,
+        lastModified: response.headers.get("last-modified") || null,
+      };
+    } catch (error) {
+      // An unavailable attachment must not suppress an independently verified
+      // article update. Keep the last known-good bytes, or fingerprint a pending
+      // marker so the first successful download is observed as a real change.
+      hashes[rawUrl] = previousHashes[rawUrl] ?? "pending";
+      validators[rawUrl] = previousValidators[rawUrl] ?? {};
+      errors.push({ url: rawUrl, error });
+    }
+  }
+
+  return { hashes, validators, errors };
+}
+
+export const combinedDeepHash = (bodyHash, pdfHashes) => {
+  const attachments = Object.entries(pdfHashes).sort(([a], [b]) => a.localeCompare(b));
+  return createHash("sha256")
+    .update(bodyHash)
+    .update(JSON.stringify(attachments))
+    .digest("hex")
+    .slice(0, 16);
+};
+
+async function fetchPriorityPost(id, entry) {
+  const url = postUrl(entry, id);
+  const headers = { "user-agent": UA, accept: "text/html,application/xhtml+xml" };
+  if (entry.etag && (entry.deepBodyHash || entry.deepHash)) headers["if-none-match"] = entry.etag;
+  if (entry.lastModified && (entry.deepBodyHash || entry.deepHash)) headers["if-modified-since"] = entry.lastModified;
+
+  const response = await fetchUnilag(url, {
+    headers,
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  const finalUrl = new URL(response.url || url);
+  if (finalUrl.protocol !== "https:" ||
+      !["unilag.edu.ng", "www.unilag.edu.ng"].includes(finalUrl.hostname)) {
+    throw new Error("redirected outside HTTPS UNILAG (" + finalUrl.href + ")");
+  }
+
+  if (response.status === 304) {
+    const bodyHash = entry.deepBodyHash || entry.deepHash;
+    if (!bodyHash) throw new Error("post returned 304 without a cached body fingerprint: " + id);
+    const pdfs = entry.deepPdfs ?? entry.pdfs ?? [];
+    const { hashes, validators, errors: pdfErrors } = await fetchPdfFingerprints(
+      pdfs,
+      entry.pdfHashes ?? {},
+      entry.pdfValidators ?? {},
+    );
+    const item = {
+      id: String(id),
+      title: entry.title || "UNILAG announcement",
+      link: entry.link || finalUrl.href,
+      pdfs,
+      hash: combinedDeepHash(bodyHash, hashes),
+    };
+    return {
+      notModified: true,
+      item,
+      deepBodyHash: bodyHash,
+      pdfHashes: hashes,
+      pdfValidators: validators,
+      pdfErrors,
+      etag: response.headers.get("etag") || entry.etag || null,
+      lastModified: response.headers.get("last-modified") || entry.lastModified || null,
+      url: item.link,
+    };
+  }
+
+  if (!response.ok) throw new Error("HTTP " + response.status);
+  const html = await response.text();
+  if (/class=["'][^"']*(?:error404|not-found)[^"']*["']/i.test(html) ||
+      /<title[^>]*>[^<]*(?:page not found|404)[^<]*<\/title>/i.test(html)) {
+    throw new Error("WordPress returned a not-found page");
+  }
+
+  const item = parsePostPage(html, finalUrl.href, id);
+  const deepBodyHash = item.hash;
+  const { hashes, validators, errors: pdfErrors } = await fetchPdfFingerprints(
+    item.pdfs,
+    entry.pdfHashes ?? {},
+    entry.pdfValidators ?? {},
+  );
+  item.hash = combinedDeepHash(deepBodyHash, hashes);
+
+  return {
+    item,
+    deepBodyHash,
+    pdfHashes: hashes,
+    pdfValidators: validators,
+    pdfErrors,
+    // A fresh 200 representation invalidates validators that the origin no longer returns.
+    etag: response.headers.get("etag") || null,
+    lastModified: response.headers.get("last-modified") || null,
+    url: item.link,
+  };
+}
+
+async function mapLimit(values, limit, fn) {
+  const results = new Array(values.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, values.length) }, async () => {
+    while (true) {
+      const index = next++;
+      if (index >= values.length) return;
+      try { results[index] = await fn(values[index]); }
+      catch (error) { results[index] = { error }; }
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
 
 async function main() {
   const { sources } = JSON.parse(await readFile(SOURCES_FILE, "utf8"));
   const state = await loadState();
-  const now = new Date().toISOString();
-
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
+  const nowMs = nowDate.getTime();
   let totalChanges = 0;
   let totalPruned = 0;
-  let nextSources = { ...state.sources };
+  let totalDeepChecked = 0;
+  let totalDeepFailed = 0;
+  let totalPdfFailed = 0;
+  const nextSources = { ...state.sources };
 
   for (const source of sources) {
     let items;
     try {
-      const res = await fetch(source.url, {
+      const response = await fetchUnilag(source.url, {
         headers: { "user-agent": UA, accept: "application/rss+xml, application/xml, text/xml" },
         signal: AbortSignal.timeout(45_000),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      items = parseFeed(await res.text());
-    } catch (err) {
-      // Leave this source's state untouched so a transient failure is retried
-      // on the next run instead of being silently marked as up to date.
-      console.error(`[${source.id}] fetch failed: ${err.message} — state left unchanged`);
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      items = parseFeed(await response.text());
+    } catch (error) {
+      console.error("[" + source.id + "] feed fetch failed: " + error.message + " — state left unchanged");
       continue;
     }
 
-    const seen = state.sources[source.id]?.seen ?? {};
-    const keywords = (source.keywords ?? []).map((k) => k.toLowerCase());
+    const seen = { ...(state.sources[source.id]?.seen ?? {}) };
+    const keywords = (source.keywords ?? []).map((keyword) => keyword.toLowerCase());
     const changes = [];
+    const feedIds = new Set();
 
     for (const item of items) {
       if (keywords.length) {
-        const haystack = `${item.title} ${item.text}`.toLowerCase();
-        if (!keywords.some((k) => haystack.includes(k))) continue;
+        const haystack = (item.title + " " + item.text).toLowerCase();
+        if (!keywords.some((keyword) => haystack.includes(keyword))) continue;
+      }
+      feedIds.add(item.id);
+      const previous = seen[item.id];
+      if (!previous) changes.push({ kind: "new", item });
+      else if (previous.hash !== item.hash) changes.push({ kind: "updated", item });
+      seen[item.id] = {
+        ...previous, hash: item.hash, firstSeen: previous?.firstSeen ?? now, lastSeen: now,
+        link: item.link || previous?.link || null, title: item.title, pdfs: item.pdfs,
+        priority: item.priority ||
+          /(?:timetable|exam|lecture)/i.test(source.id) ||
+          previous?.priority === true,
+      };
+    }
+
+    // Poll tagged priority posts on every run, including while they remain in
+    // RSS. Unclassified legacy numeric IDs are checked once for migration.
+    const candidates = Object.entries(seen).filter(([id, entry]) =>
+      /^\d+$/.test(id) &&
+      isWithinDeepPollWindow(entry, nowMs) &&
+      (entry.priority === true || (!feedIds.has(id) && entry.priority !== false)));
+
+    const deepResults = await mapLimit(candidates, DEEP_POLL_CONCURRENCY,
+      ([id, entry]) => fetchPriorityPost(id, entry));
+
+    for (let index = 0; index < candidates.length; index++) {
+      const id = candidates[index][0];
+      const entry = seen[id];
+      const result = deepResults[index];
+      totalDeepChecked++;
+
+      if (result.error) {
+        totalDeepFailed++;
+        console.warn("[" + source.id + "] deep-poll " + id + " failed: " + result.error.message + " — retaining previous fingerprints");
+        continue;
+      }
+      totalPdfFailed += (result.pdfErrors ?? []).length;
+      for (const pdfError of result.pdfErrors ?? []) {
+        console.warn("[" + source.id + "] PDF fingerprint failed for " + pdfError.url + ": " + pdfError.error.message + " — retaining previous fingerprint and retrying next run");
       }
 
-      const previous = seen[item.id];
-      if (!previous) {
-        changes.push({ kind: "new", item });
-      } else if (previous.hash !== item.hash) {
+      if (result.notModified) {
+        const item = result.item;
+        if (deepPageChanged(entry, item) &&
+            !changes.some((change) => change.item.id === id)) {
+          changes.push({ kind: "updated", item });
+        }
+        seen[id] = {
+          ...entry,
+          deepHash: item.hash,
+          deepHashVersion: 2,
+          deepBodyHash: result.deepBodyHash,
+          pdfHashes: result.pdfHashes,
+          pdfValidators: result.pdfValidators,
+          pdfs: item.pdfs,
+          deepPdfs: item.pdfs,
+          etag: result.etag,
+          lastModified: result.lastModified,
+        };
+        continue;
+      }
+
+      const item = result.item;
+      const wasPriority = entry.priority === true;
+      if (!wasPriority && !item.priority) {
+        // One-time migration check for older state entries. Non-priority
+        // records are marked false so they do not consume requests again.
+        seen[id] = {
+          ...entry,
+          priority: false,
+          link: result.url,
+          title: item.title,
+          pdfs: item.pdfs,
+          etag: result.etag,
+          lastModified: result.lastModified,
+        };
+        continue;
+      }
+
+      // RSS and article-page extraction are different representations.
+      // Keep their fingerprints separate to prevent cross-format false alerts.
+      // A legacy post gets a direct-page baseline on its first successful poll.
+      if (deepPageChanged(entry, item) &&
+          !changes.some((change) => change.item.id === id)) {
         changes.push({ kind: "updated", item });
       }
 
-      seen[item.id] = { hash: item.hash, firstSeen: previous?.firstSeen ?? now, lastSeen: now };
+      seen[id] = {
+        ...entry,
+        deepHash: item.hash,
+        deepHashVersion: 2,
+        deepBodyHash: result.deepBodyHash,
+        pdfHashes: result.pdfHashes,
+        pdfValidators: result.pdfValidators,
+        link: result.url,
+        title: item.title,
+        pdfs: item.pdfs,
+        deepPdfs: item.pdfs,
+        priority: true,
+        etag: result.etag,
+        lastModified: result.lastModified,
+      };
     }
 
-    const { kept, dropped } = pruneSeen(seen);
-    if (dropped) console.log(`[${source.id}] pruned ${dropped} stale post(s) older than ${RETENTION_DAYS} days`);
-
+    const { kept, dropped } = pruneSeen(seen, nowMs);
+    if (dropped) console.log("[" + source.id + "] pruned " + dropped + " stale post(s)");
     totalChanges += changes.length;
     totalPruned += dropped;
     nextSources[source.id] = { url: source.url, seen: kept };
 
     if (SEED) continue;
-
     if (!changes.length) {
-      console.log(`[${source.id}] no changes (${items.length} items checked)`);
+      console.log("[" + source.id + "] no changes (" + items.length + " feed items, " + candidates.length + " deep-poll candidates)");
       continue;
     }
-
-    console.log(`[${source.id}] ${changes.length} change(s)`);
-
+    console.log("[" + source.id + "] " + changes.length + " change(s)");
     if (DRY_RUN) {
       console.log(renderEntries(source, changes));
       continue;
     }
-
-    for (const chunk of splitMessage(source, changes)) {
-      await sendTelegram(chunk);
-    }
+    for (const chunk of splitMessage(source, changes)) await sendTelegram(chunk);
   }
 
-  if (SEED) {
-    console.log(`seeded: recorded baseline for ${Object.keys(nextSources).length} source(s), nothing sent`);
-  } else if (!DRY_RUN && totalChanges === 0) {
-    console.log("no changes across all sources");
-  }
-
+  console.log("deep-poll summary: " + totalDeepChecked + " checked, " + totalDeepFailed + " article fetches failed, " + totalPdfFailed + " PDF checks failed");
+  if (SEED) console.log("seeded: recorded baseline for " + Object.keys(nextSources).length + " source(s), nothing sent");
+  else if (!DRY_RUN && totalChanges === 0) console.log("no changes across all sources");
   if (DRY_RUN) return;
 
-  // Nothing changed, so leave state.json untouched. Rewriting it just to bump
-  // the timestamp would leave the CI working tree dirty every run and produce
-  // an empty commit every 30 minutes. Pruning counts as a change, otherwise
-  // stale entries would be recomputed and discarded on every run forever.
-  if (totalChanges === 0 && totalPruned === 0 && state.lastChange) {
+  const stateChanged = JSON.stringify(state.sources) !== JSON.stringify(nextSources);
+  if (totalChanges === 0 && totalPruned === 0 && !stateChanged && state.lastChange) {
     console.log("state unchanged, not rewritten");
     return;
   }
-
-  // State is written only after every send above succeeded, so a failed
-  // notification is retried on the next run instead of being lost.
-  const nextState = { version: STATE_VERSION, lastChange: now, sources: nextSources };
-  await writeFile(STATE_FILE, `${JSON.stringify(nextState, null, 2)}\n`);
-  console.log(`state written (${totalChanges} change(s), ${totalPruned} pruned)`);
+  // Fingerprints advance only after all Telegram sends succeed; failed sends
+  // therefore retry on the next scheduled run.
+  await writeFile(STATE_FILE, JSON.stringify({ version: STATE_VERSION, lastChange: now, sources: nextSources }, null, 2) + "\n");
+  console.log("state written (" + totalChanges + " change(s), " + totalPruned + " pruned)");
 }
 
-// Only run when invoked directly, so tests can import the pure functions.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((err) => {
-    console.error(`fatal: ${err.message}`);
+  main().catch((error) => {
+    console.error("fatal: " + error.message);
     process.exit(1);
   });
 }

@@ -11,6 +11,13 @@ import {
   renderEntries,
   splitMessage,
   pruneSeen,
+  parsePostPage,
+  isWithinDeepPollWindow,
+  postUrl,
+  deepPageChanged,
+  combinedDeepHash,
+  fetchUnilag,
+  fetchPdfFingerprints,
 } from "./watch.mjs";
 
 const FEED = `<?xml version="1.0"?>
@@ -132,4 +139,239 @@ test("splitMessage never drops or truncates an entry when output overflows", () 
   for (let n = 0; n < 40; n++) {
     assert.match(joined, new RegExp(`Post number ${n} `), `entry ${n} was lost`);
   }
+});
+
+test("priority feed metadata flags timetable posts and PDF attachments", () => {
+  const [timetable, ordinary] = parseFeed(FEED);
+  assert.equal(timetable.priority, true);
+  assert.equal(ordinary.priority, false);
+  const exampleOnly = parseFeed(FEED.replace("Staff School at 60", "Example of a campus event"));
+  assert.equal(exampleOnly[1].priority, false, "the word example must not accidentally match exam");
+});
+
+test("priority detection includes plural timetable, schedule, and calendar terms", () => {
+  for (const title of ["Exam Timetables", "Lecture Schedules", "Academic Calendars"]) {
+    const xml = FEED.replace("GST Examination Timetable", title);
+    assert.equal(parseFeed(xml)[0].priority, true, title + " should be priority");
+  }
+});
+
+test("parsePostPage fingerprints article content, not site navigation", () => {
+  const page = `<!doctype html><html><head><title>GST Examination Timetable | University of Lagos</title></head>
+  <body class="postid-80123"><nav>Navigation that must not affect the hash</nav><article>
+  <h1 class="entry-title">GST Examination Timetable</h1>
+  <div class="entry-content"><p>Exam starts at 9am in Hall A.</p>
+  <a href="/wp-content/uploads/exam.pdf">Download</a></div>
+  </article><footer>Footer text must not affect the hash</footer></body></html>`;
+  const parsed = parsePostPage(page, "https://unilag.edu.ng/?p=80123", "80123");
+  assert.equal(parsed.title, "GST Examination Timetable");
+  assert.match(parsed.text, /Exam starts at 9am in Hall A/);
+  assert.equal(parsed.priority, true);
+  assert.deepEqual(parsed.pdfs, ["https://unilag.edu.ng/wp-content/uploads/exam.pdf"]);
+  assert.throws(
+    () => parsePostPage(page.replace("postid-80123", "postid-999"), "https://unilag.edu.ng/?p=80123", "80123"),
+    /different post than requested ID/,
+  );
+  assert.throws(
+    () => parsePostPage(page.replace(' class="postid-80123"', ""), "https://unilag.edu.ng/?p=80123", "80123"),
+    /did not expose a verifiable post ID/,
+    "a page without a WordPress identity marker must not be trusted",
+  );
+  const cosmetic = page.replace("Navigation that must not affect the hash", "Different navigation")
+    .replace("Footer text must not affect the hash", "Different footer");
+  assert.equal(parsePostPage(cosmetic, "https://unilag.edu.ng/?p=80123", "80123").hash, parsed.hash);
+});
+
+test("fetchUnilag validates each redirect before making the next request", async () => {
+  const originalFetch = globalThis.fetch;
+  const requested = [];
+  const responses = [
+    new Response(null, { status: 302, headers: { location: "https://www.unilag.edu.ng/next" } }),
+    new Response("ok", { status: 200 }),
+  ];
+  globalThis.fetch = async (url, options) => {
+    requested.push({ url: String(url), redirect: options.redirect });
+    return responses.shift();
+  };
+  try {
+    const response = await fetchUnilag("https://unilag.edu.ng/start");
+    assert.equal(response.status, 200);
+    assert.deepEqual(requested, [
+      { url: "https://unilag.edu.ng/start", redirect: "manual" },
+      { url: "https://www.unilag.edu.ng/next", redirect: "manual" },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchUnilag rejects off-site, downgrade, credentialed, and excessive redirects", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://unilag.edu.ng.evil.example/steal" },
+      });
+    };
+    await assert.rejects(fetchUnilag("https://unilag.edu.ng/start"), /refusing URL outside HTTPS UNILAG/);
+    assert.equal(calls, 1, "off-site destination must never be requested");
+
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response(null, { status: 302, headers: { location: "http://unilag.edu.ng/insecure" } });
+    };
+    await assert.rejects(fetchUnilag("https://unilag.edu.ng/start"), /refusing URL outside HTTPS UNILAG/);
+    assert.equal(calls, 1, "HTTP downgrade must never be requested");
+
+    await assert.rejects(fetchUnilag("https://user:pass@unilag.edu.ng/start"), /refusing URL outside HTTPS UNILAG/);
+    assert.equal(calls, 1, "credentialed initial URLs must never be requested");
+    await assert.rejects(fetchUnilag("https://unilag.edu.ng:8443/start"), /refusing URL outside HTTPS UNILAG/);
+    assert.equal(calls, 1, "non-standard ports must never be requested");
+
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response(null, { status: 302, headers: { location: "/loop" } });
+    };
+    await assert.rejects(fetchUnilag("https://unilag.edu.ng/start"), /too many UNILAG redirects/);
+    assert.equal(calls, 4, "the initial request plus at most three redirects are allowed");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("PDF failures preserve verified hashes and do not block other attachments", async () => {
+  const originalFetch = globalThis.fetch;
+  const goodUrl = "https://unilag.edu.ng/good.pdf";
+  const failedUrl = "https://unilag.edu.ng/temporarily-unavailable.pdf";
+  const previous = { [failedUrl]: "previous-good-bytes" };
+  globalThis.fetch = async (url) => {
+    if (String(url) === goodUrl) {
+      return new Response(Buffer.from("%PDF-1.7\\nvalid test fixture"), {
+        status: 200,
+        headers: { "content-type": "application/pdf" },
+      });
+    }
+    throw new Error("simulated network failure");
+  };
+  try {
+    const result = await fetchPdfFingerprints([goodUrl, failedUrl], previous, {});
+    assert.match(result.hashes[goodUrl], /^[a-f0-9]{64}$/);
+    assert.equal(result.hashes[failedUrl], "previous-good-bytes");
+    assert.equal(result.errors.length, 1);
+    assert.equal(result.errors[0].url, failedUrl);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fresh PDF responses discard validators omitted by the origin", async () => {
+  const originalFetch = globalThis.fetch;
+  const url = "https://unilag.edu.ng/replaced.pdf";
+  globalThis.fetch = async () => new Response(Buffer.from("%PDF-1.7\\nvalid test fixture"), {
+    status: 200,
+    headers: { "content-type": "application/pdf" },
+  });
+  try {
+    const result = await fetchPdfFingerprints(
+      [url],
+      { [url]: "a".repeat(64) },
+      { [url]: { etag: "\"old-etag\"", lastModified: "Tue, 01 Jan 2026 00:00:00 GMT" } },
+    );
+    assert.match(result.hashes[url], /^[a-f0-9]{64}$/);
+    assert.deepEqual(result.validators[url], { etag: null, lastModified: null });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+test("a PDF 304 cannot freeze an unverified pending fingerprint", async () => {
+  const originalFetch = globalThis.fetch;
+  const url = "https://unilag.edu.ng/pending.pdf";
+  globalThis.fetch = async () => new Response(null, { status: 304 });
+  try {
+    const result = await fetchPdfFingerprints([url], { [url]: "pending" }, {});
+    assert.equal(result.hashes[url], "pending");
+    assert.equal(result.errors.length, 1);
+    assert.match(result.errors[0].error.message, /without a verified cached SHA-256 fingerprint/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+test("a newly discovered PDF that fails verification remains pending until a successful retry", async () => {
+  const originalFetch = globalThis.fetch;
+  const url = "https://unilag.edu.ng/new.pdf";
+  globalThis.fetch = async () => { throw new Error("temporary outage"); };
+  try {
+    const failed = await fetchPdfFingerprints([url]);
+    assert.equal(failed.hashes[url], "pending");
+    assert.equal(failed.errors.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("deep-poll window uses firstSeen and excludes records older than 60 days", () => {
+  const now = Date.parse("2026-11-11T00:00:00Z");
+  assert.equal(isWithinDeepPollWindow({ firstSeen: "2026-10-12T00:00:00Z" }, now), true);
+  assert.equal(isWithinDeepPollWindow({ firstSeen: "2026-09-01T00:00:00Z" }, now), false);
+  assert.equal(isWithinDeepPollWindow({ firstSeen: "2026-11-12T00:00:00Z" }, now), false);
+  assert.equal(isWithinDeepPollWindow({}, now), false);
+});
+
+
+test("deep polling always uses immutable WordPress post IDs, not mutable slugs", () => {
+  assert.equal(
+    postUrl({ link: "https://unilag.edu.ng/old-timetable-slug/" }, "80123"),
+    "https://unilag.edu.ng/?p=80123",
+  );
+  assert.throws(() => postUrl({}, "../not-an-id"), /invalid WordPress post ID/);
+});
+
+
+test("RSS and deep-page fingerprints are compared only within their own formats", () => {
+  const item = { hash: "direct-page-hash" };
+  assert.equal(deepPageChanged({
+    priority: true,
+    deepHashVersion: 2,
+    hash: "rss-hash",
+    deepHash: "direct-page-hash",
+  }, item), false);
+  assert.equal(deepPageChanged({
+    priority: true,
+    deepHashVersion: 2,
+    hash: "rss-hash",
+    deepHash: "previous-direct-hash",
+  }, item), true);
+  assert.equal(deepPageChanged({
+    priority: true,
+    hash: "rss-hash",
+  }, item), false, "the first direct poll establishes a baseline");
+  assert.equal(deepPageChanged({
+    priority: false,
+    deepHash: "previous-direct-hash",
+  }, item), false);
+});
+
+
+test("PDF byte fingerprints contribute to the deep-page fingerprint", () => {
+  const body = "same-article-body";
+  const first = combinedDeepHash(body, {
+    "https://unilag.edu.ng/timetable.pdf": "pdf-bytes-a",
+  });
+  const replacedPdf = combinedDeepHash(body, {
+    "https://unilag.edu.ng/timetable.pdf": "pdf-bytes-b",
+  });
+  const addedPdf = combinedDeepHash(body, {
+    "https://unilag.edu.ng/timetable.pdf": "pdf-bytes-a",
+    "https://unilag.edu.ng/venue-map.pdf": "pdf-bytes-c",
+  });
+  assert.notEqual(first, replacedPdf);
+  assert.notEqual(first, addedPdf);
+  assert.equal(first, combinedDeepHash(body, {
+    "https://unilag.edu.ng/timetable.pdf": "pdf-bytes-a",
+  }));
 });

@@ -10,8 +10,9 @@ Zero runtime dependencies. Runs on GitHub Actions every 30 minutes. State lives 
 
 ## How it works
 
-Each run fetches the RSS feeds in `sources.json`, then for every post compares a
-SHA-256 fingerprint of its content against `state.json`:
+Each run fetches the RSS feeds in `sources.json`, then compares a SHA-256 fingerprint
+of each matching post against `state.json`. Timetable, schedule, examination, lecture,
+academic-calendar, and PDF-bearing posts are tagged for targeted deep-polling:
 
 | Condition | Result |
 | --- | --- |
@@ -28,6 +29,21 @@ The feeds carry **full post bodies**, not excerpts — none of UNILAG's items us
 post it was changed.
 
 Any post containing a `.pdf` link has the direct PDF URL included in the alert.
+
+### Priority deep-polling
+
+High-priority posts are checked directly by immutable WordPress post ID for 60 days
+after first discovery, including while they remain in the RSS window. The human-facing
+permalink is stored separately because its slug can change. RSS and direct-page hashes are
+stored independently so differences in feed/article rendering cannot create false alerts.
+Linked PDFs hosted on UNILAG are also fingerprinted by their file bytes, so replacing a
+timetable PDF at the same URL is detected even when the WordPress article itself is unchanged.
+Older state entries without priority metadata are checked once (when they have a numeric
+WordPress post ID) to classify and migrate the existing cache. Requests are limited to four
+concurrent posts, time out after 15 seconds, and use `ETag` / `Last-Modified` validators
+when the server provides them. Validators are refreshed on successful `200` responses and discarded when omitted, preventing stale cache metadata from being reused. Feed, article, and PDF redirects are followed manually, with a maximum of three hops, and every destination must remain on an exact HTTPS UNILAG host using the standard HTTPS port. UNILAG-hosted PDFs are limited to 25 MiB per file; external
+PDFs are tracked by URL but not downloaded. A failed article fetch never changes saved fingerprints. A failed PDF check retains its last verified hash (or a pending marker for a newly discovered attachment), so it cannot suppress an independently detected article change and is retried on the next run. A PDF `304 Not Modified` is accepted only when a verified SHA-256 digest is already cached; otherwise the attachment remains pending and is retried. HTTP 304 article responses still revalidate linked PDFs before treating a post as unchanged. Non-priority legacy posts are marked so they
+do not consume requests on later runs.
 
 ### Guarantees
 
@@ -112,8 +128,7 @@ worse than a bit of noise.
   all sources use the apex `unilag.edu.ng`.
 - `portal.unilag.edu.ng` returns 403 to non-browser clients, so portal-gated content
   is not reachable by this watcher.
-- RSS exposes only the most recent ~10 items per feed. A post edited *after* it falls
-  off the feed will not be detected.
+- RSS exposes only the most recent ~10 items per feed. Priority deep-polling closes this blindspot for posts identified as high-priority and first seen within the preceding 60 days. It cannot guarantee detection if UNILAG deletes a post, blocks requests, or serves an incomplete article page.
 - The keyword sources are WordPress *search* results, so loosely-related posts can
   appear. Tighten with `keywords` if that becomes noisy.
 
@@ -126,3 +141,4 @@ worse than a bit of noise.
 | `state.json` | last-seen cache, committed by CI after each run |
 | `test.mjs` | unit tests covering parsing, fingerprinting and message splitting |
 | `.github/workflows/watch.yml` | 30-minute cron + state commit-back |
+| `.github/workflows/test.yml` | Unit tests on pushes and pull requests |
