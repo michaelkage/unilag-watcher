@@ -212,7 +212,7 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 function assertTrustedUnilagUrl(value) {
   const url = value instanceof URL ? value : new URL(value);
   if (url.protocol !== "https:" || !UNILAG_HOSTS.has(url.hostname) ||
-      url.username || url.password) {
+      (url.port !== "" && url.port !== "443") || url.username || url.password) {
     throw new Error("refusing URL outside HTTPS UNILAG: " + url.href);
   }
   return url;
