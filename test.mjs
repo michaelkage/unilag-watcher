@@ -17,6 +17,7 @@ import {
   deepPageChanged,
   combinedDeepHash,
   fetchUnilag,
+  fetchPdfFingerprints,
 } from "./watch.mjs";
 
 const FEED = `<?xml version="1.0"?>
@@ -236,6 +237,44 @@ test("fetchUnilag rejects off-site, downgrade, credentialed, and excessive redir
     };
     await assert.rejects(fetchUnilag("https://unilag.edu.ng/start"), /too many UNILAG redirects/);
     assert.equal(calls, 4, "the initial request plus at most three redirects are allowed");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("PDF failures preserve verified hashes and do not block other attachments", async () => {
+  const originalFetch = globalThis.fetch;
+  const goodUrl = "https://unilag.edu.ng/good.pdf";
+  const failedUrl = "https://unilag.edu.ng/temporarily-unavailable.pdf";
+  const previous = { [failedUrl]: "previous-good-bytes" };
+  globalThis.fetch = async (url) => {
+    if (String(url) === goodUrl) {
+      return new Response(Buffer.from("%PDF-1.7\\nvalid test fixture"), {
+        status: 200,
+        headers: { "content-type": "application/pdf" },
+      });
+    }
+    throw new Error("simulated network failure");
+  };
+  try {
+    const result = await fetchPdfFingerprints([goodUrl, failedUrl], previous, {});
+    assert.match(result.hashes[goodUrl], /^[a-f0-9]{64}$/);
+    assert.equal(result.hashes[failedUrl], "previous-good-bytes");
+    assert.equal(result.errors.length, 1);
+    assert.equal(result.errors[0].url, failedUrl);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("a newly discovered PDF that fails verification remains pending until a successful retry", async () => {
+  const originalFetch = globalThis.fetch;
+  const url = "https://unilag.edu.ng/new.pdf";
+  globalThis.fetch = async () => { throw new Error("temporary outage"); };
+  try {
+    const failed = await fetchPdfFingerprints([url]);
+    assert.equal(failed.hashes[url], "pending");
+    assert.equal(failed.errors.length, 1);
   } finally {
     globalThis.fetch = originalFetch;
   }
