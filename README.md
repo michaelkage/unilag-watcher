@@ -41,7 +41,7 @@ timetable PDF at the same URL is detected even when the WordPress article itself
 Older state entries without priority metadata are checked once (when they have a numeric
 WordPress post ID) to classify and migrate the existing cache. Requests are limited to four
 concurrent posts, time out after 15 seconds, and use `ETag` / `Last-Modified` validators
-when the server provides them. Redirects are followed manually, with a maximum of three hops, and every destination must remain on an exact HTTPS UNILAG host. UNILAG-hosted PDFs are limited to 25 MiB per file; external
+when the server provides them. Feed, article, and PDF redirects are followed manually, with a maximum of three hops, and every destination must remain on an exact HTTPS UNILAG host. UNILAG-hosted PDFs are limited to 25 MiB per file; external
 PDFs are tracked by URL but not downloaded. A failed article fetch never changes saved fingerprints. A failed PDF check retains its last verified hash (or a pending marker for a newly discovered attachment), so it cannot suppress an independently detected article change and is retried on the next run. HTTP 304 article responses still revalidate linked PDFs before treating a post as unchanged. Non-priority legacy posts are marked so they
 do not consume requests on later runs.
 
