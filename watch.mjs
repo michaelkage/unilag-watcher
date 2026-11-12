@@ -438,6 +438,7 @@ async function main() {
   let totalPruned = 0;
   let totalDeepChecked = 0;
   let totalDeepFailed = 0;
+  let totalPdfFailed = 0;
   const nextSources = { ...state.sources };
 
   for (const source of sources) {
@@ -498,6 +499,7 @@ async function main() {
         console.warn("[" + source.id + "] deep-poll " + id + " failed: " + result.error.message + " — retaining previous fingerprints");
         continue;
       }
+      totalPdfFailed += (result.pdfErrors ?? []).length;
       for (const pdfError of result.pdfErrors ?? []) {
         console.warn("[" + source.id + "] PDF fingerprint failed for " + pdfError.url + ": " + pdfError.error.message + " — retaining previous fingerprint and retrying next run");
       }
@@ -584,7 +586,7 @@ async function main() {
     for (const chunk of splitMessage(source, changes)) await sendTelegram(chunk);
   }
 
-  console.log("deep-poll summary: " + totalDeepChecked + " checked, " + totalDeepFailed + " failed");
+  console.log("deep-poll summary: " + totalDeepChecked + " checked, " + totalDeepFailed + " article fetches failed, " + totalPdfFailed + " PDF checks failed");
   if (SEED) console.log("seeded: recorded baseline for " + Object.keys(nextSources).length + " source(s), nothing sent");
   else if (!DRY_RUN && totalChanges === 0) console.log("no changes across all sources");
   if (DRY_RUN) return;
