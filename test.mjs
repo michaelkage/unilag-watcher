@@ -269,6 +269,19 @@ test("PDF failures preserve verified hashes and do not block other attachments",
   }
 });
 
+test("a PDF 304 cannot freeze an unverified pending fingerprint", async () => {
+  const originalFetch = globalThis.fetch;
+  const url = "https://unilag.edu.ng/pending.pdf";
+  globalThis.fetch = async () => new Response(null, { status: 304 });
+  try {
+    const result = await fetchPdfFingerprints([url], { [url]: "pending" }, {});
+    assert.equal(result.hashes[url], "pending");
+    assert.equal(result.errors.length, 1);
+    assert.match(result.errors[0].error.message, /without a verified cached SHA-256 fingerprint/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 test("a newly discovered PDF that fails verification remains pending until a successful retry", async () => {
   const originalFetch = globalThis.fetch;
   const url = "https://unilag.edu.ng/new.pdf";
