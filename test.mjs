@@ -229,6 +229,8 @@ test("fetchUnilag rejects off-site, downgrade, credentialed, and excessive redir
 
     await assert.rejects(fetchUnilag("https://user:pass@unilag.edu.ng/start"), /refusing URL outside HTTPS UNILAG/);
     assert.equal(calls, 1, "credentialed initial URLs must never be requested");
+    await assert.rejects(fetchUnilag("https://unilag.edu.ng:8443/start"), /refusing URL outside HTTPS UNILAG/);
+    assert.equal(calls, 1, "non-standard ports must never be requested");
 
     calls = 0;
     globalThis.fetch = async () => {
