@@ -11,7 +11,7 @@ export const DEEP_POLL_DAYS = 60;
 export const DEEP_POLL_CONCURRENCY = 4;
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
-const PRIORITY_PATTERN = /\b(?:time\s*table|schedule|examinations?|exams?|lectures?|academic\s+calendar)\b/i;
+const PRIORITY_PATTERN = /\b(?:time\s*tables?|schedules?|examinations?|exams?|lectures?|academic\s+calendars?)\b/i;
 const SEED = process.argv.includes("--seed");
 const DRY_RUN = process.argv.includes("--dry-run");
 
