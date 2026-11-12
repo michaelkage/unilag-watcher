@@ -269,6 +269,25 @@ test("PDF failures preserve verified hashes and do not block other attachments",
   }
 });
 
+test("fresh PDF responses discard validators omitted by the origin", async () => {
+  const originalFetch = globalThis.fetch;
+  const url = "https://unilag.edu.ng/replaced.pdf";
+  globalThis.fetch = async () => new Response(Buffer.from("%PDF-1.7\\nvalid test fixture"), {
+    status: 200,
+    headers: { "content-type": "application/pdf" },
+  });
+  try {
+    const result = await fetchPdfFingerprints(
+      [url],
+      { [url]: "a".repeat(64) },
+      { [url]: { etag: "\"old-etag\"", lastModified: "Tue, 01 Jan 2026 00:00:00 GMT" } },
+    );
+    assert.match(result.hashes[url], /^[a-f0-9]{64}$/);
+    assert.deepEqual(result.validators[url], { etag: null, lastModified: null });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 test("a PDF 304 cannot freeze an unverified pending fingerprint", async () => {
   const originalFetch = globalThis.fetch;
   const url = "https://unilag.edu.ng/pending.pdf";
