@@ -318,9 +318,11 @@ export async function fetchPdfFingerprints(urls, previousHashes = {}, previousVa
       }
 
       hashes[rawUrl] = createHash("sha256").update(bytes).digest("hex");
+      // A 200 response starts a new representation. Do not carry validators
+      // forward when the origin omits them; stale validators can cause a false 304.
       validators[rawUrl] = {
-        etag: response.headers.get("etag") || previous.etag || null,
-        lastModified: response.headers.get("last-modified") || previous.lastModified || null,
+        etag: response.headers.get("etag") || null,
+        lastModified: response.headers.get("last-modified") || null,
       };
     } catch (error) {
       // An unavailable attachment must not suppress an independently verified
@@ -411,8 +413,9 @@ async function fetchPriorityPost(id, entry) {
     pdfHashes: hashes,
     pdfValidators: validators,
     pdfErrors,
-    etag: response.headers.get("etag") || entry.etag || null,
-    lastModified: response.headers.get("last-modified") || entry.lastModified || null,
+    // A fresh 200 representation invalidates validators that the origin no longer returns.
+    etag: response.headers.get("etag") || null,
+    lastModified: response.headers.get("last-modified") || null,
     url: item.link,
   };
 }
