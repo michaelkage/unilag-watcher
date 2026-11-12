@@ -443,7 +443,7 @@ async function main() {
   for (const source of sources) {
     let items;
     try {
-      const response = await fetch(source.url, {
+      const response = await fetchUnilag(source.url, {
         headers: { "user-agent": UA, accept: "application/rss+xml, application/xml, text/xml" },
         signal: AbortSignal.timeout(45_000),
       });
