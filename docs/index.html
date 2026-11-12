@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#10251f">
+<title>UNILAG Watcher — Field Manual</title>
+<meta name="description" content="An interactive, source-accurate field manual for UNILAG Watcher: RSS change detection, state, Telegram delivery and GitHub Actions operations.">
+<style>
+:root{--ink:#15231f;--muted:#64716b;--paper:#f2f0e8;--card:#fbfaf5;--line:#d9d8cd;--green:#173c30;--green2:#285c48;--lime:#d5e7a4;--red:#a64232;--amber:#9b6a19;--mono:ui-monospace,SFMono-Regular,Consolas,monospace;--sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.55}a{color:var(--green2);text-decoration-thickness:1px;text-underline-offset:3px}a:hover{color:var(--red)}button,input,textarea,select{font:inherit}button{cursor:pointer}.shell{max-width:1240px;margin:auto;padding:0 34px}.top{background:var(--green);color:#f5f2e9;border-bottom:5px solid var(--lime)}.topbar{height:62px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #ffffff24;font-size:12px;letter-spacing:.12em;text-transform:uppercase}.brand{display:flex;gap:11px;align-items:center;font-weight:800}.seal{width:26px;height:26px;border:1px solid var(--lime);border-radius:50%;display:grid;place-items:center;color:var(--lime);font-family:var(--mono);font-size:11px}.topbar a{color:#dce8d8}.hero{padding:66px 0 74px;display:grid;grid-template-columns:1.35fr .65fr;gap:50px;align-items:end}.eyebrow{font-family:var(--mono);font-size:11px;color:var(--lime);letter-spacing:.15em;text-transform:uppercase}.hero h1{font-size:clamp(48px,7.5vw,94px);line-height:.93;letter-spacing:-.075em;margin:18px 0 23px;max-width:760px}.hero p{font-size:17px;color:#d0d8d1;max-width:650px;margin:0}.hero-note{border-left:1px solid #ffffff4a;padding:6px 0 6px 22px;color:#d0d8d1;font-size:13px}.hero-note strong{display:block;color:var(--lime);font:12px var(--mono);text-transform:uppercase;letter-spacing:.1em;margin-bottom:9px}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#ffffff30;border-top:1px solid #ffffff30}.metric{padding:18px 20px;background:#10251f}.metric b{display:block;color:var(--lime);font:26px var(--mono);letter-spacing:-.06em}.metric span{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#b8c7be}
+main{padding:44px 0 90px}.layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:52px}.rail{position:sticky;top:24px;align-self:start;padding-top:7px}.rail small{font:10px var(--mono);letter-spacing:.14em;color:var(--muted);text-transform:uppercase}.rail a{display:block;text-decoration:none;color:#52615a;padding:8px 0;font-size:13px;border-bottom:1px solid var(--line)}.rail a:hover{color:var(--red)}.content{min-width:0}.section{padding:0 0 56px;margin:0 0 54px;border-bottom:1px solid var(--line);scroll-margin-top:28px}.kicker{font:11px var(--mono);color:var(--red);letter-spacing:.13em;text-transform:uppercase}.section h2{font-size:clamp(30px,4vw,48px);line-height:1.02;letter-spacing:-.055em;margin:12px 0 15px}.lead{font-size:17px;color:#46534d;max-width:760px}.section h3{font-size:18px;letter-spacing:-.025em;margin:30px 0 8px}.section p{max-width:790px}.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin:25px 0}.tile{background:var(--card);border:1px solid var(--line);padding:19px}.tile .num{font:11px var(--mono);color:var(--red)}.tile h3{margin:8px 0;font-size:17px}.tile p{font-size:13px;color:var(--muted);margin:0}.callout{background:#e7eadc;border-left:3px solid var(--green2);padding:15px 18px;margin:22px 0;font-size:13px}.callout.warn{background:#f1e8d7;border-color:var(--amber)}.callout.danger{background:#f1e2dc;border-color:var(--red)}.flow{display:flex;align-items:stretch;gap:7px;margin:25px 0;flex-wrap:wrap}.step{background:var(--green);color:#f5f2e9;padding:13px 15px;min-width:130px;flex:1}.step b{display:block;font:11px var(--mono);color:var(--lime);margin-bottom:5px}.step span{font-size:12px}.arrow{align-self:center;color:var(--red);font:20px var(--mono)}.code{background:#17251f;color:#dce8df;padding:18px 20px;overflow:auto;font:12px/1.75 var(--mono);border-radius:2px;white-space:pre}.code .comment{color:#9db79e}.code .key{color:#d5e7a4}.tablewrap{overflow:auto;margin:18px 0;border:1px solid var(--line);background:var(--card)}table{border-collapse:collapse;width:100%;font-size:13px;min-width:520px}th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}th{font:10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);background:#f0efe7}td code{font:11px var(--mono)}.pill{display:inline-block;border:1px solid var(--line);padding:3px 8px;border-radius:20px;font:10px var(--mono);color:var(--green2)}.lab{background:#e8e9df;border:1px solid #d2d4c7;padding:22px;margin:25px 0}.labhead{display:flex;align-items:flex-start;justify-content:space-between;gap:15px;margin-bottom:16px}.labhead h3{margin:0;font-size:21px}.labhead p{margin:4px 0 0;color:var(--muted);font-size:12px}.controls{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:5px}.field.full{grid-column:1/-1}.field label{font:10px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:#58645d}.field input,.field textarea,.field select{width:100%;background:#fbfaf5;border:1px solid #c8cbbd;padding:10px 11px;color:var(--ink);border-radius:0;font-size:13px}.field textarea{min-height:96px;resize:vertical}.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.btn{border:1px solid var(--green);background:var(--green);color:#fff;padding:9px 14px;font-size:12px}.btn.secondary{background:transparent;color:var(--green)}.btn:hover{background:var(--green2);color:white}.result{margin-top:15px;background:#17251f;color:#e8eee7;padding:17px}.resulttop{display:flex;justify-content:space-between;gap:12px;align-items:center}.status{font:11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--lime)}.result p{font-size:12px;color:#c4d0c7;margin:9px 0}.hash{font:11px var(--mono);overflow-wrap:anywhere;color:#d5e7a4}.result ul{margin:10px 0 0;padding-left:18px;font-size:12px;color:#d6ddd7}.tabs{display:flex;gap:7px;flex-wrap:wrap;margin:15px 0}.tab{border:1px solid var(--line);padding:7px 10px;background:transparent;font:11px var(--mono);color:var(--muted)}.tab[aria-pressed=true]{background:var(--green);color:white;border-color:var(--green)}.source-list{display:grid;gap:0;border-top:1px solid var(--line);margin-top:20px}.source{display:grid;grid-template-columns:170px 1fr;gap:16px;padding:14px 0;border-bottom:1px solid var(--line);font-size:13px}.source b{font-size:13px}.source code{font:11px var(--mono);color:var(--muted);overflow-wrap:anywhere}.foot{background:var(--green);color:#dce8df;padding:34px 0}.footrow{display:flex;justify-content:space-between;gap:20px;align-items:center}.foot small{font:11px var(--mono);color:#b6c6bc}.foot a{color:var(--lime)}.tiny{font:11px var(--mono);color:var(--muted)}.checklist{padding-left:20px}.checklist li{padding:4px 0}.tagrow{display:flex;gap:7px;flex-wrap:wrap;margin:14px 0}
+@media(max-width:850px){.shell{padding:0 21px}.hero{grid-template-columns:1fr;gap:28px;padding:54px 0}.hero-note{max-width:600px}.layout{grid-template-columns:1fr;gap:25px}.rail{position:static;display:flex;gap:15px;overflow:auto;border-bottom:1px solid var(--line);padding:0 0 10px}.rail small{display:none}.rail a{white-space:nowrap;border:0}.section{padding-bottom:40px;margin-bottom:40px}}
+@media(max-width:560px){.shell{padding:0 16px}.topbar{height:55px}.topbar .repo-label{display:none}.hero h1{font-size:56px}.hero p{font-size:15px}.metrics{grid-template-columns:1fr 1fr}.metric:last-child{grid-column:1/-1}.grid2,.controls{grid-template-columns:1fr}.field.full{grid-column:auto}.source{grid-template-columns:1fr;gap:4px}.flow{display:grid;grid-template-columns:1fr}.arrow{transform:rotate(90deg);justify-self:center}.footrow{align-items:flex-start;flex-direction:column}}
+</style>
+</head>
+<body>
+<header class="top">
+ <div class="shell">
+  <div class="topbar"><div class="brand"><span class="seal">UW</span> FIELD MANUAL / 001</div><div class="repo-label">UNILAG WATCHER · MAIN BRANCH</div><a href="https://github.com/michaelkage/unilag-watcher">SOURCE ↗</a></div>
+  <div class="hero">
+   <div><div class="eyebrow">A small watcher with a very specific job</div><h1>Know when<br>UNILAG changes.</h1><p>UNILAG Watcher checks public WordPress feeds for new posts and amended posts, then sends the differences to Telegram. This manual follows the implementation in <code>main</code>—not an imagined product roadmap.</p></div>
+   <aside class="hero-note"><strong>Operational brief</strong>Four RSS sources. Stable post identity. SHA-256 content fingerprints. Telegram delivery. A JSON state file committed by GitHub Actions. No database, queue service, or runtime package dependencies.</aside>
+  </div>
+  <div class="metrics"><div class="metric"><b>4</b><span>Configured feeds</span></div><div class="metric"><b>16</b><span>Hex chars per fingerprint</span></div><div class="metric"><b>180d</b><span>Seen-post retention</span></div></div>
+ </div>
+</header>
+<main class="shell">
+ <div class="layout">
+  <nav class="rail" aria-label="Manual sections"><small>Contents</small><a href="#model">01 / Model</a><a href="#pipeline">02 / Pipeline</a><a href="#lab">03 / Diff lab</a><a href="#state">04 / State</a><a href="#delivery">05 / Delivery</a><a href="#operate">06 / Operate</a><a href="#limits">07 / Limits</a><a href="#source">08 / Source map</a></nav>
+  <article class="content">
+   <section class="section" id="model">
+    <div class="kicker">01 — Mental model</div><h2>It watches posts, not pages.</h2>
+    <p class="lead">The unit of tracking is a WordPress post. A post can keep the same identity while its slug or content changes. The watcher stores the last fingerprint for each post ID, per feed, and compares the next observation against it.</p>
+    <div class="grid2">
+     <div class="tile"><div class="num">IDENTITY</div><h3>Stable post key</h3><p>It looks for <code>?p=NNNNN</code> in the RSS guid first, then the link. If neither has an ID, it falls back to the link, then a title fingerprint.</p></div>
+     <div class="tile"><div class="num">CHANGE</div><h3>Content fingerprint</h3><p>HTML is reduced to text, whitespace is collapsed, and the title is appended. SHA-256 is truncated to the first 16 hexadecimal characters.</p></div>
+     <div class="tile"><div class="num">DELIVERY</div><h3>Telegram message</h3><p>New and updated posts are rendered as HTML messages. Up to three discovered PDF links are included for each post.</p></div>
+     <div class="tile"><div class="num">MEMORY</div><h3>Repository state</h3><p><code>state.json</code> records hashes and first/last-seen timestamps. GitHub Actions commits it after a successful run.</p></div>
+    </div>
+    <div class="callout"><strong>Important distinction.</strong> The README describes the current baseline behavior on <code>main</code>. A separate open pull request, <a href="https://github.com/michaelkage/unilag-watcher/pull/1">#1 — priority deep-polling</a>, proposes fetching older articles and checking linked PDF bytes. That work is not part of <code>main</code> yet, so it is deliberately not represented as shipped behavior here.</div>
+   </section>
+   <section class="section" id="pipeline">
+    <div class="kicker">02 — Execution path</div><h2>One scheduled run, end to end.</h2>
+    <p class="lead">The scheduled workflow starts Node 20, checks that Telegram credentials exist, runs the watcher, and commits a changed state file. The schedule is configured as <code>7,17,47 * * * *</code>—three times an hour, not every 30 minutes.</p>
+    <div class="flow" aria-label="Pipeline steps"><div class="step"><b>01 / READ</b><span>Load sources.json + state.json</span></div><span class="arrow">→</span><div class="step"><b>02 / FETCH</b><span>Request each RSS feed</span></div><span class="arrow">→</span><div class="step"><b>03 / PARSE</b><span>Extract posts, text, IDs, PDFs</span></div><span class="arrow">→</span><div class="step"><b>04 / DIFF</b><span>Compare per-source hashes</span></div><span class="arrow">→</span><div class="step"><b>05 / SEND</b><span>Deliver Telegram chunks</span></div><span class="arrow">→</span><div class="step"><b>06 / SAVE</b><span>Write state for CI commit</span></div></div>
+    <h3>Configured sources</h3>
+    <div class="source-list">
+     <div class="source"><b>UNILAG News</b><code>https://unilag.edu.ng/feed/</code></div>
+     <div class="source"><b>Exam Timetable</b><code>/search/exam+timetable/feed/rss2/</code></div>
+     <div class="source"><b>Lecture Timetable</b><code>/search/lecture+timetable/feed/rss2/</code></div>
+     <div class="source"><b>Admission Deadline</b><code>/search/admission+deadline/feed/rss2/</code></div>
+    </div>
+    <p class="tiny">All four use the apex host unilag.edu.ng. The configured keyword arrays are empty, so every post returned by each feed is trusted.</p>
+    <h3>What counts as a change?</h3>
+    <div class="tablewrap"><table><thead><tr><th>Observation</th><th>Classification</th><th>Action</th></tr></thead><tbody><tr><td>Post ID is absent from that source's saved state</td><td><span class="pill">NEW</span></td><td>Queue a new-post alert</td></tr><tr><td>Post ID exists, stored hash differs</td><td><span class="pill">UPDATED</span></td><td>Queue an amended-post alert</td></tr><tr><td>Post ID exists, hash matches</td><td><span class="pill">UNCHANGED</span></td><td>No Telegram alert</td></tr><tr><td>Feed request or parse fetch fails</td><td><span class="pill">SOURCE ERROR</span></td><td>Skip that source; preserve its stored snapshot</td></tr></tbody></table></div>
+    <div class="callout warn">The watcher reads the RSS window exposed by UNILAG. In the baseline implementation, an edit made after a post falls out of that feed window cannot be discovered by this polling path.</div>
+   </section>
+   <section class="section" id="lab">
+    <div class="kicker">03 — Interactive demonstration</div><h2>Change the post. Watch the verdict.</h2>
+    <p class="lead">This browser-side lab mirrors the baseline comparison rule: strip tags, collapse whitespace, append the title, hash with SHA-256, and compare with a previous fingerprint. It does not contact UNILAG, Telegram, GitHub, or your repository.</p>
+    <div class="lab">
+     <div class="labhead"><div><h3>Post fingerprint lab</h3><p>Try a title edit, a timetable change, or a harmless formatting edit.</p></div><span class="pill">LOCAL SIMULATION</span></div>
+     <div class="controls">
+      <div class="field"><label for="postid">WordPress post ID</label><input id="postid" value="80123"></div>
+      <div class="field"><label for="mode">Previous state</label><select id="mode"><option value="new">No saved post (NEW)</option><option value="same">Saved post (compare)</option></select></div>
+      <div class="field full"><label for="title">Current post title</label><input id="title" value="GST: Amended Final Examination Timetable & Guidelines"></div>
+      <div class="field full"><label for="body">Current post body (HTML or text)</label><textarea id="body"><p>The timetable has been <strong>revised</strong>. Check the updated examination dates before attending.</p><p><a href="https://unilag.edu.ng/wp-content/uploads/timetable.pdf">Download the timetable PDF</a>.</p></textarea></div>
+      <div class="field full"><label for="baseline">Previous fingerprint (16 hex characters)</label><input id="baseline" value="0197e57879b6c144" spellcheck="false"></div>
+     </div>
+     <div class="actions"><button class="btn" id="run">Compare post</button><button class="btn secondary" id="sampleSame">Load unchanged example</button><button class="btn secondary" id="sampleEdit">Load amended example</button><button class="btn secondary" id="reset">Reset</button></div>
+     <div class="result" aria-live="polite"><div class="resulttop"><strong id="verdict" class="status">READY TO COMPARE</strong><span id="idout" class="tiny" style="color:#b7c7bc">POST #80123</span></div><p id="explain">Run the comparison to calculate the current fingerprint.</p><div class="hash" id="hashout">Current hash: —</div><ul id="reasons"><li>HTML tags are removed and whitespace is collapsed.</li><li>The title is included in the fingerprint input.</li></ul></div>
+     <p class="tiny" style="margin:12px 0 0">Note: this lab uses the Web Crypto SHA-256 implementation in your browser. The production code uses Node's built-in crypto module. Both calculate SHA-256; the production watcher also uses its XML parser helpers and feed-derived post identity.</p>
+    </div>
+   </section>
+   <section class="section" id="state">
+    <div class="kicker">04 — Persistence</div><h2>State is the memory.</h2>
+    <p class="lead"><code>state.json</code> is not a database. It is a versioned JSON snapshot keyed by source ID, then post ID. Each entry stores a fingerprint plus first-seen and last-seen timestamps.</p>
+    <div class="code"><span class="comment">// Simplified shape from state.json</span>
+{
+  <span class="key">"version"</span>: 1,
+  <span class="key">"lastChange"</span>: "2026-10-02T20:44:11.319Z",
+  <span class="key">"sources"</span>: {
+    "exam-timetable": {
+      "url": "https://unilag.edu.ng/search/exam+timetable/feed/rss2/",
+      "seen": {
+        "80123": {
+          "hash": "0197e57879b6c144",
+          "firstSeen": "2026-10-02T20:04:12.988Z",
+          "lastSeen": "2026-10-02T20:44:11.319Z"
+        }
+      }
+    }
+  }
+}</div>
+    <div class="grid2">
+     <div class="tile"><div class="num">RETENTION</div><h3>180 days</h3><p>Entries older than 180 days since lastSeen are pruned. Entries with missing or invalid lastSeen timestamps are retained by the current helper.</p></div>
+     <div class="tile"><div class="num">NO-OP WRITES</div><h3>Quiet means quiet</h3><p>If there are no changes and no pruned entries, the watcher avoids rewriting state.json, preventing empty commits on every poll.</p></div>
+    </div>
+    <h3>Failure and retry semantics</h3>
+    <p>A failed source fetch leaves that source's state unchanged so the next run can retry it. The watcher sends all generated chunks before writing the new snapshot. If a Telegram send throws, execution stops before the state write, so the changes are eligible to be retried on the next run.</p>
+    <div class="callout warn"><strong>Delivery nuance:</strong> this is retry-by-not-advancing-state, not a durable per-message queue. If an earlier chunk or source was delivered and a later send fails, the earlier alert can be sent again on the next run. Telegram's HTTP response is checked for HTTP success; the current code does not separately inspect Telegram's JSON <code>ok</code> field.</div>
+    <p>Seed mode records the current feed contents as the baseline without sending alerts. This is useful after initial setup, when the existing feed window would otherwise produce a burst of first-run notifications.</p>
+   </section>
+   <section class="section" id="delivery">
+    <div class="kicker">05 — Notifications</div><h2>Telegram is the output channel.</h2>
+    <p class="lead">The bot sends HTML-formatted messages to one configured chat. The message includes the source label, a NEW or UPDATED marker, the post title linked to its permalink, and up to three direct PDF links extracted from the RSS item.</p>
+    <div class="code"><span class="comment"># Required GitHub Actions secrets</span>
+TELEGRAM_BOT_TOKEN = "your BotFather token"
+TELEGRAM_CHAT_ID   = "your numeric chat ID"
+
+<span class="comment"># Local run example</span>
+node --env-file=.env watch.mjs --dry-run</div>
+    <h3>Message splitting</h3>
+    <p>Telegram's message cap is 4,096 characters. The watcher packs whole post entries into chunks capped at 3,800 characters, leaving headroom. It does not split an individual entry across messages; an unusually large single entry can still exceed the safe target.</p>
+    <div class="callout">PDF handling in <code>main</code> means link extraction and inclusion in the alert. It does <strong>not</strong> download the PDF, inspect its bytes, or detect a replacement file behind an unchanged URL. Those capabilities are proposed separately in PR #1.</div>
+   </section>
+   <section class="section" id="operate">
+    <div class="kicker">06 — Runbook</div><h2>Install, configure, verify.</h2>
+    <h3>Requirements</h3>
+    <p>Node.js 20 or newer. The repository has no runtime npm dependencies; parsing, hashing, file I/O, and HTTP requests use Node's built-in APIs.</p>
+    <div class="code">git clone https://github.com/michaelkage/unilag-watcher.git
+cd unilag-watcher
+
+<span class="comment"># Inspect changes without sending or writing state</span>
+npm run dry
+
+<span class="comment"># Run the unit suite</span>
+npm test
+
+<span class="comment"># Record a baseline, without notifications</span>
+npm run seed
+
+<span class="comment"># Send real Telegram notifications (requires env secrets)</span>
+npm run watch</div>
+    <h3>First-time Telegram setup</h3>
+    <ol class="checklist"><li>Create a bot with <a href="https://t.me/BotFather">@BotFather</a> and copy its token.</li><li>Open the bot and press Start so it can message you.</li><li>Get your numeric chat ID using the Telegram Bot API <code>getUpdates</code> endpoint.</li><li>Add <code>TELEGRAM_BOT_TOKEN</code> and <code>TELEGRAM_CHAT_ID</code> under GitHub → Settings → Secrets and variables → Actions.</li><li>Run <code>npm run seed</code> locally and commit the resulting <code>state.json</code>, or trigger a seed run in an appropriately configured local environment.</li><li>Use Actions → UNILAG Watcher → Run workflow to verify the scheduled path.</li></ol>
+    <div class="callout warn">When either secret is missing, the workflow skips the watcher step and emits a warning annotation. This is intentionally a green no-op—not evidence that feed monitoring or Telegram delivery succeeded.</div>
+    <h3>Workflow schedule</h3>
+    <div class="tablewrap"><table><thead><tr><th>Trigger</th><th>Configured value</th><th>Effect</th></tr></thead><tbody><tr><td>Schedule</td><td><code>7,17,47 * * * *</code></td><td>Runs at minutes 07, 17, and 47 each hour (GitHub-hosted scheduling is not an exact clock guarantee).</td></tr><tr><td>Manual</td><td><code>workflow_dispatch</code></td><td>Allows an operator to start a run from the Actions tab.</td></tr><tr><td>Permissions</td><td><code>contents: write</code></td><td>Allows the workflow to commit updated state.json.</td></tr></tbody></table></div>
+   </section>
+   <section class="section" id="limits">
+    <div class="kicker">07 — Boundaries</div><h2>Know what it cannot see.</h2>
+    <div class="grid2">
+     <div class="tile"><div class="num">01 / SOURCE COVERAGE</div><h3>RSS window only</h3><p>UNILAG feeds expose roughly the most recent ten posts. Baseline polling cannot see an edit after a post leaves the feed.</p></div>
+     <div class="tile"><div class="num">02 / PORTAL ACCESS</div><h3>Public pages only</h3><p><code>portal.unilag.edu.ng</code> returns 403 to non-browser clients. Portal-gated information is outside this watcher's reach.</p></div>
+     <div class="tile"><div class="num">03 / TLS</div><h3>Apex domain required</h3><p>The README records a broken certificate on <code>www.unilag.edu.ng</code>; configured feeds use <code>unilag.edu.ng</code>.</p></div>
+     <div class="tile"><div class="num">04 / FEED SEARCH</div><h3>Some noise is expected</h3><p>Timetable and deadline feeds are WordPress search feeds. Empty keyword filters favor recall over precision and can include loosely related posts.</p></div>
+     <div class="tile"><div class="num">05 / PARSING</div><h3>Purpose-built RSS parsing</h3><p>The parser uses regular expressions for RSS item/tag extraction and HTML tag stripping. It is not a general XML or HTML parser.</p></div>
+     <div class="tile"><div class="num">06 / DELIVERY</div><h3>One Telegram destination</h3><p>The current configuration supports one bot token and chat ID. There is no user dashboard, preference center, or multi-recipient routing.</p></div>
+    </div>
+    <div class="callout danger"><strong>Not an official UNILAG service.</strong> This tool monitors public pages and can miss changes outside its sources or feed windows. Treat Telegram alerts as useful signals, then open the linked official post/PDF and verify important academic information directly.</div>
+   </section>
+   <section class="section" id="source">
+    <div class="kicker">08 — Repository map</div><h2>Where the behavior lives.</h2>
+    <div class="tablewrap"><table><thead><tr><th>Path</th><th>Responsibility</th></tr></thead><tbody><tr><td><code>watch.mjs</code></td><td>Feed fetch, parsing, stable IDs, text normalization, fingerprints, diffing, Telegram rendering/sending, pruning, and state persistence.</td></tr><tr><td><code>sources.json</code></td><td>Four RSS URLs, source labels, IDs, and optional keyword filters.</td></tr><tr><td><code>state.json</code></td><td>Versioned last-seen snapshot committed by CI.</td></tr><tr><td><code>test.mjs</code></td><td>Node's built-in test runner covers entity decoding, plain text, fingerprints, feed parsing, PDF extraction, pruning, HTML escaping, and message splitting.</td></tr><tr><td><code>package.json</code></td><td>Node engine requirement and watch/seed/dry/test scripts.</td></tr><tr><td><code>.github/workflows/watch.yml</code></td><td>Scheduled/manual run, secret gate, Node setup, and state commit-back.</td></tr><tr><td><code>docs/index.html</code></td><td>This standalone field manual and local behavior simulator.</td></tr></tbody></table></div>
+    <div class="tagrow"><span class="pill">Node ≥ 20</span><span class="pill">No npm runtime deps</span><span class="pill">node:test</span><span class="pill">GitHub Actions</span><span class="pill">Telegram Bot API</span></div>
+    <p>Source repository: <a href="https://github.com/michaelkage/unilag-watcher">github.com/michaelkage/unilag-watcher</a>. Read the implementation and tests when behavior matters; this manual is an explanatory companion, not a replacement for the code.</p>
+   </section>
+  </article>
+ </div>
+</main>
+<footer class="foot"><div class="shell footrow"><div><strong>UNILAG WATCHER</strong><br><small>FIELD MANUAL · GENERATED FROM THE MAIN-BRANCH IMPLEMENTATION</small></div><div><a href="https://github.com/michaelkage/unilag-watcher">Repository</a> · <a href="https://github.com/michaelkage/unilag-watcher/actions">Actions</a> · <a href="https://github.com/michaelkage/unilag-watcher/pull/1">Deep-polling proposal</a></div></div></footer>
+<script>
+(() => {
+ const $ = (id) => document.getElementById(id);
+ const initial = {title:"GST: Amended Final Examination Timetable & Guidelines",body:'<p>The timetable has been <strong>revised</strong>. Check the updated examination dates before attending.</p><p><a href="https://unilag.edu.ng/wp-content/uploads/timetable.pdf">Download the timetable PDF</a>.</p>',baseline:"0197e57879b6c144"};
+ const clean = (s) => s.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim();
+ const decode = (s) => s.replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&#39;|&apos;/g,"'");
+ async function digest(text){
+  if(!globalThis.crypto || !crypto.subtle) throw new Error("Web Crypto is unavailable in this browser context. Open the Pages HTTPS URL or use a modern browser.");
+  const bytes = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest("SHA-256",bytes);
+  return Array.from(new Uint8Array(hash)).map(x=>x.toString(16).padStart(2,"0")).join("").slice(0,16);
+ }
+ async function compare(){
+  const title=$("title").value;
+  const body=decode(clean($("body").value));
+  const id=$("postid").value.trim() || "(no ID)";
+  const mode=$("mode").value;
+  $("run").disabled=true;$("verdict").textContent="HASHING…";
+  try{
+   const current=await digest(body+title);
+   const previous=$("baseline").value.trim().toLowerCase();
+   let verdict,detail,items=[];
+   if(mode==="new"){verdict="NEW";detail="No previous entry exists for this post key in this source. The watcher classifies it as new.";items=["A Telegram alert is prepared.","After successful sends, this post hash is included in the next state snapshot."];}
+   else if(previous===current){verdict="UNCHANGED";detail="The current fingerprint matches the saved fingerprint. No notification is sent.";items=["The post remains in the seen map.","No state rewrite is needed if nothing else changed or expired."];}
+   else{verdict="UPDATED";detail="The post key already exists, but its content fingerprint differs from the saved value.";items=["A Telegram UPDATED alert is prepared.","The saved fingerprint advances only after the run completes its notification sends."];}
+   $("verdict").textContent=verdict;
+   $("idout").textContent="POST #"+id;
+   $("explain").textContent=detail;
+   $("hashout").textContent="Current hash: "+current+"  ·  Previous: "+(mode==="new"?"(none)":(previous||"(empty)"));
+   $("reasons").innerHTML=items.map(x=>"<li>"+x+"</li>").join("");
+  }catch(e){$("verdict").textContent="CANNOT COMPARE";$("explain").textContent=e.message;$("hashout").textContent="Current hash: —";$("reasons").innerHTML="<li>Use a modern browser over HTTPS.</li>";}
+  finally{$("run").disabled=false;}
+ }
+ $("run").addEventListener("click",compare);
+ $("sampleSame").addEventListener("click",()=>{$("mode").value="same";$("body").value=initial.body;$("title").value=initial.title;$("baseline").value="";compare();});
+ $("sampleEdit").addEventListener("click",()=>{$("mode").value="same";$("body").value=initial.body.replace("revised","POSTPONED");$("title").value=initial.title;$("baseline").value="0197e57879b6c144";compare();});
+ $("reset").addEventListener("click",()=>{$("postid").value="80123";$("mode").value="new";$("title").value=initial.title;$("body").value=initial.body;$("baseline").value=initial.baseline;$("verdict").textContent="READY TO COMPARE";$("idout").textContent="POST #80123";$("explain").textContent="Run the comparison to calculate the current fingerprint.";$("hashout").textContent="Current hash: —";$("reasons").innerHTML="<li>HTML tags are removed and whitespace is collapsed.</li><li>The title is included in the fingerprint input.</li>";});
+ document.querySelectorAll(".rail a").forEach(a=>a.addEventListener("click",()=>{document.querySelectorAll(".rail a").forEach(x=>x.style.color="");a.style.color="var(--red)";}));
+})();
+</script>
+</body>
+</html>
