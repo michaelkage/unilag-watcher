@@ -299,7 +299,11 @@ export async function fetchPdfFingerprints(urls, previousHashes = {}, previousVa
       });
 
       if (response.status === 304) {
-        if (!previousHashes[rawUrl]) throw new Error("PDF returned 304 without a cached fingerprint");
+        // A 304 is useful only when the cache contains a verified byte digest.
+        // Never let a "pending" marker become permanent after an unsolicited 304.
+        if (!/^[a-f0-9]{64}$/i.test(previousHashes[rawUrl] ?? "")) {
+          throw new Error("PDF returned 304 without a verified cached SHA-256 fingerprint");
+        }
         hashes[rawUrl] = previousHashes[rawUrl];
         validators[rawUrl] = previous;
         continue;
