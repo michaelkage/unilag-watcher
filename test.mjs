@@ -147,6 +147,13 @@ test("priority feed metadata flags timetable posts and PDF attachments", () => {
   assert.equal(exampleOnly[1].priority, false, "the word example must not accidentally match exam");
 });
 
+test("priority detection includes plural timetable, schedule, and calendar terms", () => {
+  for (const title of ["Exam Timetables", "Lecture Schedules", "Academic Calendars"]) {
+    const xml = FEED.replace("GST Examination Timetable", title);
+    assert.equal(parseFeed(xml)[0].priority, true, title + " should be priority");
+  }
+});
+
 test("parsePostPage fingerprints article content, not site navigation", () => {
   const page = `<!doctype html><html><head><title>GST Examination Timetable | University of Lagos</title></head>
   <body class="postid-80123"><nav>Navigation that must not affect the hash</nav><article>
