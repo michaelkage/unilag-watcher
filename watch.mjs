@@ -265,65 +265,70 @@ async function readLimitedBody(response, maxBytes, label) {
   return Buffer.concat(chunks, total);
 }
 
-async function fetchPdfFingerprints(urls, previousHashes = {}, previousValidators = {}) {
+export async function fetchPdfFingerprints(urls, previousHashes = {}, previousValidators = {}) {
   const hashes = {};
   const validators = {};
+  const errors = [];
 
   for (const rawUrl of urls) {
-    const url = new URL(rawUrl);
+    try {
+      const url = new URL(rawUrl);
 
-    // Only download attachments hosted by UNILAG. External PDF links are still
-    // represented in the aggregate fingerprint by URL, but are not fetched.
-    if (!["unilag.edu.ng", "www.unilag.edu.ng"].includes(url.hostname)) {
-      hashes[rawUrl] = "external";
-      continue;
+      // Only download attachments hosted by UNILAG. External PDF links are still
+      // represented in the aggregate fingerprint by URL, but are not fetched.
+      if (![...UNILAG_HOSTS].includes(url.hostname)) {
+        hashes[rawUrl] = "external";
+        continue;
+      }
+
+      // The www host has a known certificate problem; normalize its attachments
+      // to the apex host, and upgrade legacy HTTP links to HTTPS.
+      if (url.hostname === "www.unilag.edu.ng") url.hostname = "unilag.edu.ng";
+      if (url.protocol === "http:") url.protocol = "https:";
+      assertTrustedUnilagUrl(url);
+      const requestUrl = url.href;
+
+      const previous = previousValidators[rawUrl] ?? {};
+      const headers = { "user-agent": UA, accept: "application/pdf,application/octet-stream" };
+      if (previous.etag) headers["if-none-match"] = previous.etag;
+      if (previous.lastModified) headers["if-modified-since"] = previous.lastModified;
+
+      const response = await fetchUnilag(requestUrl, {
+        headers,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+
+      if (response.status === 304) {
+        if (!previousHashes[rawUrl]) throw new Error("PDF returned 304 without a cached fingerprint");
+        hashes[rawUrl] = previousHashes[rawUrl];
+        validators[rawUrl] = previous;
+        continue;
+      }
+      if (!response.ok) throw new Error("PDF HTTP " + response.status);
+
+      const declaredLength = Number(response.headers.get("content-length") || 0);
+      if (declaredLength > MAX_PDF_BYTES) throw new Error("PDF exceeds 25 MiB limit");
+      const bytes = await readLimitedBody(response, MAX_PDF_BYTES, rawUrl);
+      if (!bytes.subarray(0, 1024).includes(Buffer.from("%PDF-"))) {
+        throw new Error("attachment response is not a valid PDF");
+      }
+
+      hashes[rawUrl] = createHash("sha256").update(bytes).digest("hex");
+      validators[rawUrl] = {
+        etag: response.headers.get("etag") || previous.etag || null,
+        lastModified: response.headers.get("last-modified") || previous.lastModified || null,
+      };
+    } catch (error) {
+      // An unavailable attachment must not suppress an independently verified
+      // article update. Keep the last known-good bytes, or fingerprint a pending
+      // marker so the first successful download is observed as a real change.
+      hashes[rawUrl] = previousHashes[rawUrl] ?? "pending";
+      validators[rawUrl] = previousValidators[rawUrl] ?? {};
+      errors.push({ url: rawUrl, error });
     }
-
-    // The www host has a known certificate problem; normalize its attachments
-    // to the apex host, and upgrade legacy HTTP links to HTTPS.
-    if (url.hostname === "www.unilag.edu.ng") url.hostname = "unilag.edu.ng";
-    if (url.protocol === "http:") url.protocol = "https:";
-    if (url.protocol !== "https:") throw new Error("refusing non-HTTPS PDF attachment: " + rawUrl);
-    const requestUrl = url.href;
-
-    const previous = previousValidators[rawUrl] ?? {};
-    const headers = { "user-agent": UA, accept: "application/pdf,application/octet-stream" };
-    if (previous.etag) headers["if-none-match"] = previous.etag;
-    if (previous.lastModified) headers["if-modified-since"] = previous.lastModified;
-
-    const response = await fetchUnilag(requestUrl, {
-      headers,
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
-
-    if (response.status === 304) {
-      if (!previousHashes[rawUrl]) throw new Error("PDF returned 304 without a cached fingerprint: " + rawUrl);
-      hashes[rawUrl] = previousHashes[rawUrl];
-      validators[rawUrl] = previous;
-      continue;
-    }
-    if (!response.ok) throw new Error("PDF HTTP " + response.status + ": " + rawUrl);
-
-    const finalUrl = new URL(response.url || rawUrl);
-    if (finalUrl.protocol !== "https:" || !["unilag.edu.ng", "www.unilag.edu.ng"].includes(finalUrl.hostname)) {
-      throw new Error("PDF redirected outside UNILAG: " + rawUrl);
-    }
-
-    const declaredLength = Number(response.headers.get("content-length") || 0);
-    if (declaredLength > MAX_PDF_BYTES) throw new Error("PDF exceeds 25 MiB limit: " + rawUrl);
-    const bytes = await readLimitedBody(response, MAX_PDF_BYTES, rawUrl);
-    if (!bytes.subarray(0, 1024).includes(Buffer.from("%PDF-"))) {
-      throw new Error("attachment response is not a valid PDF: " + rawUrl);
-    }
-
-    hashes[rawUrl] = createHash("sha256").update(bytes).digest("hex");
-    validators[rawUrl] = {
-      etag: response.headers.get("etag") || previous.etag || null,
-      lastModified: response.headers.get("last-modified") || previous.lastModified || null,
-    };
   }
 
-  return { hashes, validators };
+  return { hashes, validators, errors };
 }
 
 export const combinedDeepHash = (bodyHash, pdfHashes) => {
@@ -355,7 +360,7 @@ async function fetchPriorityPost(id, entry) {
     const bodyHash = entry.deepBodyHash || entry.deepHash;
     if (!bodyHash) throw new Error("post returned 304 without a cached body fingerprint: " + id);
     const pdfs = entry.deepPdfs ?? entry.pdfs ?? [];
-    const { hashes, validators } = await fetchPdfFingerprints(
+    const { hashes, validators, errors: pdfErrors } = await fetchPdfFingerprints(
       pdfs,
       entry.pdfHashes ?? {},
       entry.pdfValidators ?? {},
@@ -373,6 +378,7 @@ async function fetchPriorityPost(id, entry) {
       deepBodyHash: bodyHash,
       pdfHashes: hashes,
       pdfValidators: validators,
+      pdfErrors,
       etag: response.headers.get("etag") || entry.etag || null,
       lastModified: response.headers.get("last-modified") || entry.lastModified || null,
       url: item.link,
@@ -388,7 +394,7 @@ async function fetchPriorityPost(id, entry) {
 
   const item = parsePostPage(html, finalUrl.href, id);
   const deepBodyHash = item.hash;
-  const { hashes, validators } = await fetchPdfFingerprints(
+  const { hashes, validators, errors: pdfErrors } = await fetchPdfFingerprints(
     item.pdfs,
     entry.pdfHashes ?? {},
     entry.pdfValidators ?? {},
@@ -400,6 +406,7 @@ async function fetchPriorityPost(id, entry) {
     deepBodyHash,
     pdfHashes: hashes,
     pdfValidators: validators,
+    pdfErrors,
     etag: response.headers.get("etag") || entry.etag || null,
     lastModified: response.headers.get("last-modified") || entry.lastModified || null,
     url: item.link,
@@ -491,6 +498,10 @@ async function main() {
         console.warn("[" + source.id + "] deep-poll " + id + " failed: " + result.error.message + " — retaining previous fingerprints");
         continue;
       }
+      for (const pdfError of result.pdfErrors ?? []) {
+        console.warn("[" + source.id + "] PDF fingerprint failed for " + pdfError.url + ": " + pdfError.error.message + " — retaining previous fingerprint and retrying next run");
+      }
+
       if (result.notModified) {
         const item = result.item;
         if (deepPageChanged(entry, item) &&
