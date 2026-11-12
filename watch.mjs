@@ -206,6 +206,43 @@ export function postUrl(entry, id) {
   return "https://unilag.edu.ng/?p=" + encodeURIComponent(String(id));
 }
 
+const UNILAG_HOSTS = new Set(["unilag.edu.ng", "www.unilag.edu.ng"]);
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+function assertTrustedUnilagUrl(value) {
+  const url = value instanceof URL ? value : new URL(value);
+  if (url.protocol !== "https:" || !UNILAG_HOSTS.has(url.hostname) ||
+      url.username || url.password) {
+    throw new Error("refusing URL outside HTTPS UNILAG: " + url.href);
+  }
+  return url;
+}
+
+/**
+ * Follow only bounded HTTPS redirects that remain on an exact UNILAG host.
+ * Manual redirects prevent fetch from contacting an untrusted Location before
+ * the destination has been validated.
+ */
+export async function fetchUnilag(input, options = {}, maxRedirects = 3) {
+  let url = assertTrustedUnilagUrl(input);
+  for (let redirects = 0; ; redirects++) {
+    const response = await fetch(url.href, { ...options, redirect: "manual" });
+    if (!REDIRECT_STATUSES.has(response.status)) return response;
+
+    const location = response.headers.get("location");
+    await response.body?.cancel().catch(() => {});
+    if (!location) throw new Error("UNILAG redirect omitted Location header: " + url.href);
+    if (redirects >= maxRedirects) {
+      throw new Error("too many UNILAG redirects (maximum " + maxRedirects + "): " + url.href);
+    }
+
+    let destination;
+    try { destination = new URL(location, url); }
+    catch { throw new Error("invalid redirect destination from UNILAG: " + url.href); }
+    url = assertTrustedUnilagUrl(destination);
+  }
+}
+
 async function readLimitedBody(response, maxBytes, label) {
   if (!response.body) throw new Error("empty response body: " + label);
   const reader = response.body.getReader();
@@ -254,9 +291,8 @@ async function fetchPdfFingerprints(urls, previousHashes = {}, previousValidator
     if (previous.etag) headers["if-none-match"] = previous.etag;
     if (previous.lastModified) headers["if-modified-since"] = previous.lastModified;
 
-    const response = await fetch(requestUrl, {
+    const response = await fetchUnilag(requestUrl, {
       headers,
-      redirect: "follow",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
@@ -305,9 +341,8 @@ async function fetchPriorityPost(id, entry) {
   if (entry.etag && (entry.deepBodyHash || entry.deepHash)) headers["if-none-match"] = entry.etag;
   if (entry.lastModified && (entry.deepBodyHash || entry.deepHash)) headers["if-modified-since"] = entry.lastModified;
 
-  const response = await fetch(url, {
+  const response = await fetchUnilag(url, {
     headers,
-    redirect: "follow",
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   const finalUrl = new URL(response.url || url);
