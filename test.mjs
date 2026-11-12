@@ -16,6 +16,7 @@ import {
   postUrl,
   deepPageChanged,
   combinedDeepHash,
+  fetchUnilag,
 } from "./watch.mjs";
 
 const FEED = `<?xml version="1.0"?>
@@ -178,6 +179,66 @@ test("parsePostPage fingerprints article content, not site navigation", () => {
   const cosmetic = page.replace("Navigation that must not affect the hash", "Different navigation")
     .replace("Footer text must not affect the hash", "Different footer");
   assert.equal(parsePostPage(cosmetic, "https://unilag.edu.ng/?p=80123", "80123").hash, parsed.hash);
+});
+
+test("fetchUnilag validates each redirect before making the next request", async () => {
+  const originalFetch = globalThis.fetch;
+  const requested = [];
+  const responses = [
+    new Response(null, { status: 302, headers: { location: "https://www.unilag.edu.ng/next" } }),
+    new Response("ok", { status: 200 }),
+  ];
+  globalThis.fetch = async (url, options) => {
+    requested.push({ url: String(url), redirect: options.redirect });
+    return responses.shift();
+  };
+  try {
+    const response = await fetchUnilag("https://unilag.edu.ng/start");
+    assert.equal(response.status, 200);
+    assert.deepEqual(requested, [
+      { url: "https://unilag.edu.ng/start", redirect: "manual" },
+      { url: "https://www.unilag.edu.ng/next", redirect: "manual" },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchUnilag rejects off-site, downgrade, credentialed, and excessive redirects", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://unilag.edu.ng.evil.example/steal" },
+      });
+    };
+    await assert.rejects(fetchUnilag("https://unilag.edu.ng/start"), /refusing URL outside HTTPS UNILAG/);
+    assert.equal(calls, 1, "off-site destination must never be requested");
+
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response(null, { status: 302, headers: { location: "http://unilag.edu.ng/insecure" } });
+    };
+    await assert.rejects(fetchUnilag("https://unilag.edu.ng/start"), /refusing URL outside HTTPS UNILAG/);
+    assert.equal(calls, 1, "HTTP downgrade must never be requested");
+
+    await assert.rejects(fetchUnilag("https://user:pass@unilag.edu.ng/start"), /refusing URL outside HTTPS UNILAG/);
+    assert.equal(calls, 1, "credentialed initial URLs must never be requested");
+
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response(null, { status: 302, headers: { location: "/loop" } });
+    };
+    await assert.rejects(fetchUnilag("https://unilag.edu.ng/start"), /too many UNILAG redirects/);
+    assert.equal(calls, 4, "the initial request plus at most three redirects are allowed");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("deep-poll window uses firstSeen and excludes records older than 60 days", () => {
